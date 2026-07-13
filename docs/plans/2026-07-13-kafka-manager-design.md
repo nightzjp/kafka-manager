@@ -72,7 +72,7 @@ kafka-manager/
 │   ├── audit/               # JSONL 审计、轮转和查询
 │   └── platform/            # 文件、时间和加密基础能力
 ├── web/                     # React + TypeScript
-├── configs/config.example.yaml
+├── config.example.yaml
 ├── docs/
 └── data/                    # 运行数据，不提交
 ```

@@ -29,7 +29,7 @@ export KAFKA_MANAGER_PASSWORD='change-me'
 复制示例配置并把生成的哈希写入 `server.passwordHash`：
 
 ```bash
-cp configs/config.example.yaml config.yaml
+cp config.example.yaml config.yaml
 ./build/kafka-manager --config ./config.yaml
 ```
 

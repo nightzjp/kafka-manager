@@ -54,7 +54,7 @@
 - Create: `internal/config/load.go`
 - Create: `internal/config/validate.go`
 - Create: `internal/config/config_test.go`
-- Create: `configs/config.example.yaml`
+- Create: `config.example.yaml`
 
 **Steps:**
 
@@ -63,7 +63,7 @@
 3. 实现 Server、User、Cluster、Security、Audit 和 Dashboard 配置结构、默认值、YAML 严格解析及校验。
 4. 支持 `${ENV_NAME}` 环境变量引用，但禁止未解析变量通过校验。
 5. 运行 `go test ./internal/config -v`，确认全部通过。
-6. 添加仅含虚假地址的 `configs/config.example.yaml`。
+6. 添加根目录 `config.example.yaml`。
 7. 提交：`feat: add validated yaml configuration`。
 
 ### Task 3: 密码、会话与登录 API
