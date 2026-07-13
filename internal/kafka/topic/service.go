@@ -2,6 +2,7 @@ package topic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,6 +14,22 @@ type Partition struct {
 	ID, Leader                     int32
 	Replicas, ISR, OfflineReplicas []int32
 }
+
+func (p Partition) MarshalJSON() ([]byte, error) {
+	type partitionJSON Partition
+	copy := p
+	if copy.Replicas == nil {
+		copy.Replicas = []int32{}
+	}
+	if copy.ISR == nil {
+		copy.ISR = []int32{}
+	}
+	if copy.OfflineReplicas == nil {
+		copy.OfflineReplicas = []int32{}
+	}
+	return json.Marshal(partitionJSON(copy))
+}
+
 type Topic struct {
 	Name                              string
 	Internal                          bool

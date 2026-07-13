@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,9 +57,14 @@ func (b *KafkaBackend) Fetch(ctx context.Context, q Query) ([]Record, error) {
 	for len(records) < q.Limit {
 		fetchCtx, cancel := context.WithTimeout(ctx, 1200*time.Millisecond)
 		batch := consumer.PollRecords(fetchCtx, q.Limit-len(records))
+		pollCtxErr := fetchCtx.Err()
 		cancel()
 		if errs := batch.Errors(); len(errs) > 0 {
-			return nil, errs[0].Err
+			for _, fetchErr := range errs {
+				if err := pollError(fetchErr.Err, pollCtxErr, ctx.Err()); err != nil {
+					return nil, err
+				}
+			}
 		}
 		if batch.Empty() {
 			break
@@ -72,6 +78,16 @@ func (b *KafkaBackend) Fetch(ctx context.Context, q Query) ([]Record, error) {
 		})
 	}
 	return records, nil
+}
+
+func pollError(fetchErr, pollContextErr, requestContextErr error) error {
+	if requestContextErr != nil {
+		return requestContextErr
+	}
+	if errors.Is(pollContextErr, context.DeadlineExceeded) && errors.Is(fetchErr, context.DeadlineExceeded) {
+		return nil
+	}
+	return fetchErr
 }
 func (b *KafkaBackend) resolveOffset(ctx context.Context, admin *kadm.Client, q Query, partition int32) (int64, error) {
 	if q.Mode == "offset" {

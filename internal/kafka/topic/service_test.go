@@ -2,6 +2,8 @@ package topic
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -76,5 +78,18 @@ func TestServiceRejectsInvalidCreate(t *testing.T) {
 func TestTargetPartitionCountAddsIncrementToCurrentCount(t *testing.T) {
 	if got := targetPartitionCount(6, 2); got != 8 {
 		t.Fatalf("targetPartitionCount(6, 2) = %d, want 8", got)
+	}
+}
+
+func TestPartitionJSONUsesArraysInsteadOfNull(t *testing.T) {
+	raw, err := json.Marshal(Partition{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded := string(raw)
+	for _, field := range []string{`"Replicas":[]`, `"ISR":[]`, `"OfflineReplicas":[]`} {
+		if !strings.Contains(encoded, field) {
+			t.Fatalf("Partition JSON %s does not contain %s", encoded, field)
+		}
 	}
 }
