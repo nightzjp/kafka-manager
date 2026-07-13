@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react';
+import { Icon } from '../../components/Icon';
 
 type Credentials = {
   username: string;
@@ -46,10 +47,24 @@ export function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
   }
 
   return (
-    <main>
-      <form onSubmit={submit}>
-        <h1>Kafka Manager</h1>
-        <p>登录后管理开发与测试 Kafka 集群</p>
+    <main className="login-page">
+      <section className="login-intro">
+        <div className="login-brand"><span className="logo-mark">K</span><b>Kafka Manager</b></div>
+        <div>
+          <span className="section-code">INTERNAL DEVELOPER CONSOLE</span>
+          <h1>把 Kafka 日常管理<br />变成一件简单的事。</h1>
+          <p>集群状态、Topic、消息与消费组集中在一个轻量控制台。</p>
+        </div>
+        <ul>
+          <li><Icon name="check" />多集群统一查看</li>
+          <li><Icon name="check" />消息 JSON 自动格式化</li>
+          <li><Icon name="check" />操作日志按日归档</li>
+        </ul>
+      </section>
+      <form className="login-card" onSubmit={submit}>
+        <span className="login-kicker">WELCOME BACK</span>
+        <h2>登录控制台</h2>
+        <p>使用配置文件中的 Web 账户登录</p>
         <label>
           用户名
           <input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" required />
@@ -58,8 +73,11 @@ export function LoginPage({ onSuccess }: { onSuccess?: () => void }) {
           密码
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
         </label>
-        {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={submitting}>{submitting ? '登录中…' : '登录'}</button>
+        {error && <p className="login-error" role="alert">{error}</p>}
+        <button className="login-submit" type="submit" disabled={submitting}>
+          {submitting ? '正在验证…' : <>登录 <Icon name="arrow" /></>}
+        </button>
+        <small>仅供内部 Kafka 日常管理使用</small>
       </form>
     </main>
   );

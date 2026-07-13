@@ -1,0 +1,26 @@
+.success-notice { display:flex; align-items:center; gap:8px; margin:10px 0; padding:11px 12px; border:1px solid color-mix(in srgb,var(--success) 30%,var(--border)); border-radius:8px; background:var(--success-soft); color:var(--success); font-size:12px; }
+.topic-link { border:0; padding:0; background:transparent; color:var(--text); font-weight:600; text-align:left; }
+.topic-link:hover { color:var(--primary); text-decoration:underline; text-underline-offset:3px; }
+:root[data-theme="dark"] .button.primary,
+:root[data-theme="dark"] .login-submit { color:#07111f; }
+.login-page { min-height:100vh; display:grid; grid-template-columns:minmax(360px,1.1fr) minmax(360px,.9fr); background:var(--bg); }
+.login-intro { padding:clamp(36px,7vw,100px); display:flex; flex-direction:column; justify-content:space-between; background:var(--sidebar); color:#fff; position:relative; overflow:hidden; }
+.login-intro::after { content:""; position:absolute; width:420px; height:420px; border-radius:50%; right:-180px; bottom:-180px; background:#2563eb2e; box-shadow:0 0 100px #2563eb40; }
+.login-brand { display:flex; align-items:center; gap:12px; font-size:15px; }
+.login-intro h1 { font-size:clamp(35px,4vw,58px); line-height:1.14; letter-spacing:-.045em; margin:14px 0 18px; max-width:720px; }
+.login-intro p { color:#94a3b8; max-width:540px; line-height:1.8; }
+.login-intro ul { list-style:none; padding:0; margin:0; display:flex; gap:24px; flex-wrap:wrap; color:#cbd5e1; font-size:12px; position:relative; z-index:1; }
+.login-intro li { display:flex; align-items:center; gap:7px; }
+.login-intro li .icon { color:#60a5fa; }
+.login-card { width:min(410px,calc(100vw - 40px)); margin:auto; display:grid; gap:16px; padding:36px; border:1px solid var(--border); border-radius:16px; background:var(--surface); box-shadow:var(--shadow); }
+.login-kicker { font:600 10px "Fira Code",monospace; letter-spacing:.13em; color:var(--primary); }
+.login-card h2 { font-size:28px; margin:0; }
+.login-card>p { color:var(--muted); font-size:13px; margin:0 0 8px; }
+.login-card label { display:grid; gap:7px; color:var(--muted); font-size:11px; }
+.login-card input { height:44px; }
+.login-submit { height:44px; border:0; border-radius:8px; background:var(--primary); color:#fff; font-weight:600; display:flex; justify-content:center; align-items:center; gap:8px; }
+.login-submit:hover { filter:brightness(1.08); }
+.login-submit:disabled { opacity:.55; }
+.login-card>small { text-align:center; color:var(--subtle); font-size:10px; }
+.login-error { padding:10px!important; margin:0!important; border-radius:7px; background:var(--danger-soft); color:var(--danger)!important; font-size:11px!important; }
+@media(max-width:760px) { .login-page { grid-template-columns:1fr; } .login-intro { display:none; } .login-card { margin:12vh auto; } }

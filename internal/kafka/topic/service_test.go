@@ -72,3 +72,9 @@ func TestServiceRejectsInvalidCreate(t *testing.T) {
 		}
 	}
 }
+
+func TestTargetPartitionCountAddsIncrementToCurrentCount(t *testing.T) {
+	if got := targetPartitionCount(6, 2); got != 8 {
+		t.Fatalf("targetPartitionCount(6, 2) = %d, want 8", got)
+	}
+}

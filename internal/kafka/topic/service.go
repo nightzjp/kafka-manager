@@ -160,12 +160,23 @@ func (a *KadmAdmin) Delete(ctx context.Context, name string) error {
 	return err
 }
 func (a *KadmAdmin) AddPartitions(ctx context.Context, name string, count int) error {
-	responses, err := a.client.CreatePartitions(ctx, count, name)
+	details, err := a.client.ListTopics(ctx, name)
+	if err != nil {
+		return err
+	}
+	detail, ok := details[name]
+	if !ok {
+		return fmt.Errorf("topic not found")
+	}
+	targetCount := targetPartitionCount(len(detail.Partitions), count)
+	responses, err := a.client.CreatePartitions(ctx, targetCount, name)
 	if err != nil {
 		return err
 	}
 	return responses.Error()
 }
+
+func targetPartitionCount(current, increment int) int { return current + increment }
 func (a *KadmAdmin) Configs(ctx context.Context, name string) ([]Config, error) {
 	resources, err := a.client.DescribeTopicConfigs(ctx, name)
 	if err != nil {

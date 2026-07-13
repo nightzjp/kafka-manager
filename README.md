@@ -5,10 +5,11 @@
 ## 功能
 
 - 多集群状态首页：Broker、Topic、Partition、Consumer Group、ISR 异常、总 Lag 和短期 Lag 趋势。
-- Topic：搜索、详情、创建、删除、扩分区和运行配置修改。
-- 消息：按 Partition、起始位置、Offset 或时间读取，SSE 实时跟随，查看 Key、Value、Headers，并生产测试消息。
+- Topic 工作台：搜索、概览、创建、删除、扩分区和运行配置修改；进入 Topic 后可直接查看消息，不需要再次填写 Topic 名称。
+- 消息：按 Partition、起始位置、Offset 或时间读取，SSE 实时跟随，查看 Key、Value、Headers，并生产测试消息；JSON 自动识别、格式化、折叠和复制，仍支持原始文本。
 - Consumer Group：成员、分区 Lag、删除和 Offset 重置。
 - 配置：Web 编辑、连接验证、YAML 原子写回、备份、Web 回滚和热加载。
+- 界面：日间、夜间、跟随系统三种主题，主题选择自动保存在浏览器；桌面与移动端均可使用。
 - 安全：单用户登录、签名 Cookie、登录限速和危险操作审计。
 - 审计：按日期目录保存，按文件大小轮转并自动清理。
 
