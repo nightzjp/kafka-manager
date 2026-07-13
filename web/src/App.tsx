@@ -5,6 +5,7 @@ import { LoginPage } from './features/auth/LoginPage';
 import { api } from './lib/api';
 import { Cluster, DashboardPoint, Topic } from './lib/types';
 import { AppRoute, buildRoutePath, Page, parseRoutePath } from './navigation/routes';
+import { readSidebarCollapsed, writeSidebarCollapsed } from './navigation/sidebar-state';
 import { AuditPage } from './pages/AuditPage';
 import { ConsumersPage } from './pages/ConsumersPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -12,6 +13,7 @@ import { MessagesPage } from './pages/MessagesPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { TopicsPage } from './pages/TopicsPage';
 import { TopicWorkspace } from './pages/TopicWorkspace';
+import { selectExactTopic } from './pages/topic-selection';
 import { ThemeMode, useTheme } from './theme/ThemeProvider';
 import './styles.css';
 import './polish.css';
@@ -34,6 +36,7 @@ export function App() {
   const [topicLoading, setTopicLoading] = useState(Boolean(route.topicName));
   const [topicError, setTopicError] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarCollapsed(window.localStorage));
   const { mode, setMode } = useTheme();
 
   const navigate = useCallback((next: AppRoute, replace = false) => {
@@ -46,6 +49,12 @@ export function App() {
     setClusters(items);
     setHistory(points || {});
   }), []);
+  const loadTopic = useCallback(async (id: string, name: string) => {
+    const { items } = await api.get<{ items: Topic[] }>(`/api/v1/clusters/${id}/topics?search=${encodeURIComponent(name)}&pageSize=200`);
+    const found = selectExactTopic(items, name);
+    if (!found) throw new Error(`找不到 Topic：${name}`);
+    return found;
+  }, []);
 
   useEffect(() => {
     api.get('/api/v1/auth/me').then(() => setAuthenticated(true)).catch(() => setAuthenticated(false));
@@ -56,8 +65,14 @@ export function App() {
     return () => { removeEventListener('session-expired', expire); removeEventListener('popstate', backOrForward); };
   }, []);
   useEffect(() => { if (authenticated) loadClusters().catch(() => {}); }, [authenticated, loadClusters]);
+  useEffect(() => { writeSidebarCollapsed(window.localStorage, sidebarCollapsed); }, [sidebarCollapsed]);
 
   const clusterId = route.clusterId && clusters.some((cluster) => cluster.id === route.clusterId) ? route.clusterId : clusters[0]?.id || route.clusterId || '';
+  const refreshTopic = useCallback(async () => {
+    if (!route.topicName || !clusterId) return;
+    const item = await loadTopic(clusterId, route.topicName);
+    setSelectedTopic({ clusterId, item });
+  }, [clusterId, loadTopic, route.topicName]);
   useEffect(() => {
     if (clusters.length && clusterId && route.clusterId !== clusterId) navigate({ ...route, clusterId }, true);
   }, [clusterId, clusters.length, navigate, route]);
@@ -74,17 +89,15 @@ export function App() {
     if (selectedTopic?.clusterId === clusterId && selectedTopic.item.Name === route.topicName) return;
     let active = true;
     setTopicLoading(true); setTopicError('');
-    api.get<{ items: Topic[] }>(`/api/v1/clusters/${clusterId}/topics?search=${encodeURIComponent(route.topicName)}&pageSize=200`)
-      .then(({ items }) => {
+    loadTopic(clusterId, route.topicName)
+      .then((found) => {
         if (!active) return;
-        const found = items.find((item) => item.Name === route.topicName);
-        if (!found) throw new Error(`找不到 Topic：${route.topicName}`);
         setSelectedTopic({ clusterId, item: found });
       })
       .catch((reason: Error) => { if (active) setTopicError(reason.message); })
       .finally(() => { if (active) setTopicLoading(false); });
     return () => { active = false; };
-  }, [authenticated, clusterId, clusters.length, route.topicName, selectedTopic]);
+  }, [authenticated, clusterId, clusters.length, loadTopic, route.topicName, selectedTopic]);
 
   if (authenticated === null) return <div className="boot"><div className="logo-mark">K</div><span>正在启动 Kafka Manager</span></div>;
   if (!authenticated) return <LoginPage onSuccess={() => setAuthenticated(true)} />;
@@ -98,11 +111,16 @@ export function App() {
   };
 
   return <div className="app-shell">
-    <aside className={`sidebar ${menuOpen ? 'open' : ''}`}><div className="brand"><div className="logo-mark">K</div><div><b>Kafka Manager</b><span>Developer Console</span></div></div><nav>{nav.map((item) => <button key={item.id} className={route.page === item.id && !route.topicName ? 'active' : ''} onClick={() => changePage(item.id)}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav><div className="sidebar-foot"><span className={`health-dot ${clusters.some((cluster) => !cluster.online) ? 'warn' : ''}`} />{clusters.filter((cluster) => cluster.online).length}/{clusters.length} 集群在线</div></aside>
+    <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${menuOpen ? 'open' : ''}`}>
+      <div className="brand"><div className="logo-mark">K</div><div className="brand-copy"><b>Kafka Manager</b><span>Developer Console</span></div></div>
+      <button className="sidebar-toggle" aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} aria-controls="primary-navigation" aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} onClick={() => setSidebarCollapsed((value) => !value)}><Icon name={sidebarCollapsed ? 'arrow' : 'back'} /></button>
+      <nav id="primary-navigation">{nav.map((item) => <button key={item.id} data-label={item.label} aria-label={sidebarCollapsed ? item.label : undefined} className={route.page === item.id && !route.topicName ? 'active' : ''} onClick={() => changePage(item.id)}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav>
+      <div className="sidebar-foot"><span className={`health-dot ${clusters.some((cluster) => !cluster.online) ? 'warn' : ''}`} /><span className="sidebar-foot-copy">{clusters.filter((cluster) => cluster.online).length}/{clusters.length} 集群在线</span></div>
+    </aside>
     {menuOpen && <button className="nav-scrim" aria-label="关闭导航" onClick={() => setMenuOpen(false)} />}
-    <section className="workspace">
+    <section className={`workspace ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <header className="topbar"><button className="icon-button mobile-menu" aria-label="打开导航" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><div className="cluster-picker"><span>当前集群</span><select value={clusterId} onChange={(event) => navigate({ page: route.page, clusterId: event.target.value })}>{clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.name}</option>)}</select></div><div className="top-actions"><span className={`connection ${current?.online ? 'online' : 'offline'}`}><i />{current?.online ? `在线 · ${current.latencyMs}ms` : '连接中断'}</span><ThemeSwitch mode={mode} setMode={setMode} /><button className="icon-button" title="退出登录" onClick={() => api.post('/api/v1/auth/logout', {}).finally(() => setAuthenticated(false))}><Icon name="logout" /></button></div></header>
-      <main className="content">{route.topicName ? topicLoading ? <Loading /> : topicError ? <TopicRouteError message={topicError} back={() => navigate({ page: 'topics', clusterId }, true)} /> : topic ? <TopicWorkspace clusterId={clusterId} topic={topic} tab={route.topicTab || 'overview'} setTab={(topicTab) => navigate({ ...route, topicTab })} onBack={() => navigate({ page: 'topics', clusterId })} /> : null : <>
+      <main className="content">{route.topicName ? topicLoading ? <Loading /> : topicError ? <TopicRouteError message={topicError} back={() => navigate({ page: 'topics', clusterId }, true)} /> : topic ? <TopicWorkspace clusterId={clusterId} topic={topic} tab={route.topicTab || 'overview'} setTab={(topicTab) => navigate({ ...route, topicTab })} onBack={() => navigate({ page: 'topics', clusterId })} onRefresh={refreshTopic} /> : null : <>
         {route.page === 'dashboard' && <DashboardPage clusters={clusters} history={history} refresh={loadClusters} openCluster={(id, page) => navigate({ page, clusterId: id })} />}
         {route.page === 'topics' && <TopicsPage clusterId={clusterId} onOpen={openTopic} />}
         {route.page === 'messages' && <MessagesPage clusterId={clusterId} />}

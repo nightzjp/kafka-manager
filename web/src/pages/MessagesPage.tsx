@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon';
 import { JsonViewer, parseMessageValue } from '../components/JsonViewer';
 import { api } from '../lib/api';
 import { MessageRecord } from '../lib/types';
-import { activeFilterCount, filterQueryParams, JSONFilterCondition, JSONOperator, KeyOperator, MessageFilters, ValueOperator } from './message-filters';
+import { activeFilterCount, filterQueryParams, JSONFilterCondition, JSONOperator, KeyOperator, MessageFilters, parseMessageFilters, replaceMessageFilterParams, ValueOperator } from './message-filters';
 
 type MessageQueryResult = { items: MessageRecord[]; scanned: number; matched: number; skippedInvalidJson: number; resultLimited: boolean; scanLimited: boolean };
 type QueryMeta = Omit<MessageQueryResult, 'items'> & { matched: number; filters: number };
@@ -24,7 +24,7 @@ export function MessagesPage({ clusterId, fixedTopic, embedded = false }: { clus
   const [timestamp, setTimestamp] = useState('');
   const [limit, setLimit] = useState(100);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState<MessageFilters>({ keyFilter: '', keyOperator: 'contains', valueFilter: '', valueOperator: 'contains', scanLimit: 5000, jsonFilters: [] });
+  const [filters, setFilters] = useState<MessageFilters>(() => parseMessageFilters(new URLSearchParams(window.location.search)));
   const [queryMeta, setQueryMeta] = useState<QueryMeta>();
   const stream = useRef<EventSource | null>(null);
   const filterCount = activeFilterCount(filters);
@@ -50,6 +50,12 @@ export function MessagesPage({ clusterId, fixedTopic, embedded = false }: { clus
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterId, fixedTopic]);
   useEffect(() => () => stream.current?.close(), []);
+  useEffect(() => {
+    const next = replaceMessageFilterParams(new URLSearchParams(window.location.search), filters);
+    const query = next.toString();
+    const url = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
+    window.history.replaceState(window.history.state, '', url);
+  }, [filters]);
 
   function follow() {
     if (live) { stop(); return; }

@@ -8,16 +8,18 @@ import { MessagesPage } from './MessagesPage';
 
 export type TopicTab = 'overview' | 'messages' | 'partitions' | 'config';
 
-export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack }: {
+export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack, onRefresh }: {
   clusterId: string;
   topic: Topic;
   tab: TopicTab;
   setTab: (tab: TopicTab) => void;
   onBack: () => void;
+  onRefresh: () => Promise<void>;
 }) {
   const [error, setError] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const feedback = useFeedback();
   async function remove() {
     setDeleting(true); setError('');
@@ -31,6 +33,12 @@ export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack }: {
       setError(message); feedback.error('删除 Topic 失败', message);
     } finally { setDeleting(false); }
   }
+  async function refresh() {
+    setRefreshing(true); setError('');
+    try { await onRefresh(); feedback.success('Topic 已刷新', '分区、ISR 和复制因子已更新'); }
+    catch (reason) { const message = reason instanceof Error ? reason.message : '刷新 Topic 失败'; setError(message); feedback.error('刷新 Topic 失败', message); }
+    finally { setRefreshing(false); }
+  }
 
   return <div className="topic-workspace">
     <button className="back-link" onClick={onBack}><Icon name="back" />返回 Topics</button>
@@ -43,7 +51,7 @@ export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack }: {
           <span>{topic.PartitionCount} 分区</span><span>复制因子 {topic.ReplicationFactor}</span>
         </div>
       </div>
-      <button className="button danger" onClick={() => { setError(''); setConfirmingDelete(true); }}><Icon name="trash" />删除 Topic</button>
+      <div className="workspace-actions"><button className="button ghost" disabled={refreshing} onClick={() => void refresh()}><Icon name="refresh" />{refreshing ? '刷新中…' : '刷新'}</button><button className="button danger" onClick={() => { setError(''); setConfirmingDelete(true); }}><Icon name="trash" />删除 Topic</button></div>
     </header>
     <Tabs value={tab} onChange={setTab} items={[
       { id: 'overview', label: '概览' }, { id: 'messages', label: '消息' },
@@ -53,7 +61,7 @@ export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack }: {
     <div className="tab-panel" role="tabpanel" id={`workspace-panel-${tab}`} aria-labelledby={`workspace-tab-${tab}`}>
       {tab === 'overview' && <Overview topic={topic} setTab={setTab} />}
       {tab === 'messages' && <MessagesPage clusterId={clusterId} fixedTopic={topic.Name} embedded />}
-      {tab === 'partitions' && <Partitions clusterId={clusterId} topic={topic} />}
+      {tab === 'partitions' && <Partitions clusterId={clusterId} topic={topic} onRefresh={onRefresh} />}
       {tab === 'config' && <Configs clusterId={clusterId} topic={topic.Name} />}
     </div>
     {confirmingDelete && <ConfirmDialog title="删除 Topic" description={<><b>此操作不可撤销。</b><p>Topic 的全部消息、分区和配置都会被永久删除。</p></>} confirmLabel="永久删除 Topic" confirmationText={topic.Name} pending={deleting} error={error} onClose={() => { setConfirmingDelete(false); setError(''); }} onConfirm={remove} />}
@@ -78,7 +86,7 @@ function Summary({ label, value, tone }: { label: string; value: string | number
   return <article className={`summary-card ${tone || ''}`}><span>{label}</span><strong>{value}</strong></article>;
 }
 
-function Partitions({ clusterId, topic }: { clusterId: string; topic: Topic }) {
+function Partitions({ clusterId, topic, onRefresh }: { clusterId: string; topic: Topic; onRefresh: () => Promise<void> }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [adding, setAdding] = useState(false);
@@ -86,12 +94,18 @@ function Partitions({ clusterId, topic }: { clusterId: string; topic: Topic }) {
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const count = Number(new FormData(event.currentTarget).get('count'));
+    let expanded = false;
     try {
       await api.post(`/api/v1/clusters/${clusterId}/topics/${encodeURIComponent(topic.Name)}/partitions`, { count });
+      expanded = true;
+      await onRefresh();
       setAdding(false); setError('');
-      setNotice(`已提交新增 ${count} 个分区；返回 Topic 列表后会刷新最新元数据。`);
-      feedback.success('分区扩容已提交', `${topic.Name} 新增 ${count} 个分区`);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : '扩容失败'); }
+      setNotice(`已新增 ${count} 个分区，当前分区列表和 Topic 元数据已刷新。`);
+      feedback.success('分区扩容完成', `${topic.Name} 新增 ${count} 个分区`);
+    } catch (reason) {
+      const detail = reason instanceof Error ? reason.message : '未知错误';
+      setError(expanded ? `分区扩容已提交，但刷新元数据失败：${detail}` : detail);
+    }
   }
   return <section className="panel">
     <div className="panel-heading"><div><h2>分区列表</h2><p>扩分区不可撤销，请确认生产者分区策略</p></div><button className="button primary" onClick={() => setAdding(!adding)}><Icon name="plus" />增加分区</button></div>
