@@ -13,7 +13,6 @@ data/                 # 必须可写
 启动：
 
 ```bash
-export KAFKA_MANAGER_SECRET_KEY='at-least-32-random-bytes'
 ./kafka-manager --config ./config.yaml
 ```
 
@@ -44,10 +43,10 @@ WantedBy=multi-user.target
 1. 备份二进制、`config.yaml` 和 `data/`。
 2. 使用新二进制执行 `--print-password-hash`，确认可以启动。
 3. 停止旧进程并替换二进制。
-4. 使用原配置和同一个 `KAFKA_MANAGER_SECRET_KEY` 启动。
+4. 使用原配置启动新版本。
 5. 检查首页集群状态和日志。
 
-配置 Web 保存前会在 `data/config-backups/YYYY-MM-DD/` 生成备份。不要在升级时更换主密钥。
+配置 Web 保存前会在 `data/config-backups/YYYY-MM-DD/` 生成备份。
 
 ## 反向代理
 

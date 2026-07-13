@@ -8,7 +8,7 @@
 - Topic：搜索、详情、创建、删除、扩分区和运行配置修改。
 - 消息：按 Partition、起始位置、Offset 或时间读取，SSE 实时跟随，查看 Key、Value、Headers，并生产测试消息。
 - Consumer Group：成员、分区 Lag、删除和 Offset 重置。
-- 配置：Web 编辑、连接验证、密码加密、YAML 原子写回、备份、Web 回滚和热加载。
+- 配置：Web 编辑、连接验证、YAML 原子写回、备份、Web 回滚和热加载。
 - 安全：单用户登录、Argon2id、签名 Cookie、登录限速和危险操作审计。
 - 审计：按日期目录保存，按文件大小轮转并自动清理。
 
@@ -30,12 +30,10 @@ export KAFKA_MANAGER_PASSWORD='change-me'
 
 ```bash
 cp configs/config.example.yaml config.yaml
-export KAFKA_MANAGER_SECRET_KEY='replace-with-at-least-32-random-bytes'
-export KAFKA_TEST_PASSWORD='测试集群密码'
 ./build/kafka-manager --config ./config.yaml
 ```
 
-打开 `http://localhost:8080`。正式环境应把主密钥放在进程环境或操作系统 Secret 中。
+打开 `http://localhost:8080`。Kafka 地址、用户名和密码都直接配置在 `config.yaml` 中，不要求额外环境变量。
 
 ## 开发
 

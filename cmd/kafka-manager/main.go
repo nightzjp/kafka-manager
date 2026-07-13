@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"flag"
 	"log"
 	"net/http"
@@ -35,9 +36,9 @@ func main() {
 		os.Stdout.WriteString(hash + "\n")
 		return
 	}
-	secret := []byte(os.Getenv("KAFKA_MANAGER_SECRET_KEY"))
-	if len(secret) < 32 {
-		log.Fatal("KAFKA_MANAGER_SECRET_KEY must contain at least 32 bytes")
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		log.Fatalf("initialize session key: %v", err)
 	}
 	store := config.NewStore(*configPath, filepath.Join(filepath.Dir(*configPath), "data", "config-backups"))
 	persisted, err := store.Load()

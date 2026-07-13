@@ -38,7 +38,7 @@ pnpm --dir web build
 - `internal/api`：REST API 与认证边界。
 - `internal/cluster`：franz-go 客户端池。
 - `internal/kafka`：Topic、消息和 Consumer Group 服务。
-- `internal/config`：YAML、加密、原子保存和热加载。
+- `internal/config`：YAML、原子保存、备份和热加载。
 - `internal/audit`：JSONL 轮转、清理和查询。
 - `internal/webassets`：嵌入前端资源。
 - `web`：React + TypeScript 控制台。

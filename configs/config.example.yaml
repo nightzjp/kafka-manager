@@ -13,7 +13,7 @@ clusters:
       protocol: SASL_PLAINTEXT
       mechanism: PLAIN
       username: kafka
-      password: "${KAFKA_TEST_PASSWORD}"
+      password: "replace-with-test-kafka-password"
 
   - id: internal
     name: 内网环境

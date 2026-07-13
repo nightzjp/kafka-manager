@@ -19,7 +19,7 @@ clusters:
       protocol: SASL_PLAINTEXT
       mechanism: PLAIN
       username: kafka
-      password: "${KAFKA_TEST_PASSWORD}"
+      password: "你的测试集群密码"
 
   - id: internal
     name: 内网环境
@@ -38,13 +38,7 @@ dashboard:
   historyPoints: 240
 ```
 
-仅 `${NAME}` 形式会展开环境变量；普通 `$` 会原样保留，因此不会破坏 Argon2id 哈希。
-
-上面的测试环境对应原 kafka-ui 中的 `SASL_PLAINTEXT + PLAIN` 配置；Java 的 `sasl.jaas.config` 在本项目中拆分为 `mechanism`、`username` 和 `password`。内网环境沿用无认证的 `PLAINTEXT`。启动前设置测试集群密码：
-
-```bash
-export KAFKA_TEST_PASSWORD='测试集群密码'
-```
+上面的测试环境对应原 kafka-ui 中的 `SASL_PLAINTEXT + PLAIN` 配置；Java 的 `sasl.jaas.config` 在本项目中拆分为 `mechanism`、`username` 和 `password`。内网环境沿用无认证的 `PLAINTEXT`。Kafka 密码直接填写在 YAML 中，不需要额外环境变量。
 
 ## Kafka 安全协议
 
@@ -65,7 +59,7 @@ SASL 机制支持 `PLAIN`、`SCRAM-SHA-256`、`SCRAM-SHA-512`。
 KAFKA_MANAGER_PASSWORD='new-password' ./kafka-manager --print-password-hash
 ```
 
-通过 Web 保存的 Kafka 密码使用 AES-GCM 加密，格式为 `enc:v1:...`。加密密钥来自 `KAFKA_MANAGER_SECRET_KEY`，至少 32 字节。丢失密钥后无法恢复已加密密码。
+Kafka 密码保存在 YAML 中；Web 接口不会回显已有密码，留空表示保持原密码。请把配置文件权限设置为 `0600`，并确保 `config.yaml` 不提交到 Git。
 
 ## 审计
 

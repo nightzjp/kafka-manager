@@ -6,6 +6,8 @@
 
 **Architecture:** 使用 Go 模块化单体提供 REST/SSE API、配置热加载、Kafka 客户端池和本地审计；React + TypeScript 构建产物通过 `embed` 打入 Go 二进制。YAML 是配置唯一事实源，运行指标仅来自 Kafka API 并在内存中短期保存。
 
+**最终部署调整：** 为满足内部单用户场景的最简部署要求，Kafka 凭据最终直接保存在权限为 `0600` 且被 Git 忽略的 `config.yaml`，运行时不再要求 Kafka 密码或加密主密钥环境变量。下方早期任务中的密文格式记录保留为实现过程说明。
+
 **Tech Stack:** Go 1.24+、franz-go、chi、YAML v3、Argon2id、React 18、TypeScript、Vite、TanStack Query、Vitest、Testing Library、pnpm。
 
 ---

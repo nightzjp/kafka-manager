@@ -113,19 +113,7 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_config", err.Error())
 		return
 	}
-	persisted := candidate
-	persisted.Clusters = append([]config.ClusterConfig(nil), candidate.Clusters...)
-	for i := range persisted.Clusters {
-		if persisted.Clusters[i].Security.Password != "" {
-			encrypted, err := config.Encrypt(s.secret, persisted.Clusters[i].Security.Password)
-			if err != nil {
-				writeError(w, 500, "encryption_failed", err.Error())
-				return
-			}
-			persisted.Clusters[i].Security.Password = encrypted
-		}
-	}
-	data, err := yaml.Marshal(persisted)
+	data, err := yaml.Marshal(candidate)
 	if err != nil {
 		writeError(w, 500, "encode_config", err.Error())
 		return
