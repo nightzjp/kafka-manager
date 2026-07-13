@@ -1,0 +1,33 @@
+server:
+  listenAddress: ":8080"
+  username: admin
+  passwordHash: "replace-with-argon2id-hash"
+  sessionHours: 12
+
+clusters:
+  - id: dev
+    name: 开发环境
+    brokers:
+      - localhost:9092
+    security:
+      protocol: PLAINTEXT
+
+  - id: test
+    name: 测试环境
+    brokers:
+      - localhost:9093
+    security:
+      protocol: SASL_PLAINTEXT
+      mechanism: SCRAM-SHA-256
+      username: "${KAFKA_TEST_USERNAME}"
+      password: "${KAFKA_TEST_PASSWORD}"
+
+audit:
+  enabled: true
+  directory: ./data/audit
+  retentionDays: 30
+  maxFileSizeMB: 50
+
+dashboard:
+  sampleIntervalSeconds: 15
+  historyPoints: 240
