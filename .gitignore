@@ -1,2 +1,10 @@
 .worktrees/
 
+build/
+data/
+config.yaml
+config.*.yaml
+!configs/config.example.yaml
+web/dist/
+web/node_modules/
+web/*.tsbuildinfo
