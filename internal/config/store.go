@@ -5,9 +5,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 )
+
+type Backup struct {
+	ID        string    `json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	Size      int64     `json:"size"`
+}
 
 type Store struct {
 	path, backupDir string
@@ -76,4 +84,66 @@ func (s *Store) Save(data []byte) (Config, error) {
 		return Config{}, fmt.Errorf("replace config: %w", err)
 	}
 	return cfg, nil
+}
+
+func (s *Store) ListBackups() ([]Backup, error) {
+	backups := make([]Backup, 0)
+	err := filepath.WalkDir(s.backupDir, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			return nil
+		}
+		relative, err := filepath.Rel(s.backupDir, path)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		backups = append(backups, Backup{ID: filepath.ToSlash(relative), CreatedAt: info.ModTime(), Size: info.Size()})
+		return nil
+	})
+	if os.IsNotExist(err) {
+		return []Backup{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(backups, func(i, j int) bool { return backups[i].CreatedAt.After(backups[j].CreatedAt) })
+	return backups, nil
+}
+func (s *Store) Restore(id string) (Config, error) {
+	data, cfg, err := s.LoadBackup(id)
+	if err != nil {
+		return Config{}, err
+	}
+	_, err = s.Save(data)
+	return cfg, err
+}
+
+func (s *Store) LoadBackup(id string) ([]byte, Config, error) {
+	clean := filepath.Clean(filepath.FromSlash(id))
+	if clean == "." || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean == ".." {
+		return nil, Config{}, fmt.Errorf("invalid backup id")
+	}
+	path := filepath.Join(s.backupDir, clean)
+	relative, err := filepath.Rel(s.backupDir, path)
+	if err != nil || strings.HasPrefix(relative, "..") {
+		return nil, Config{}, fmt.Errorf("invalid backup id")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, Config{}, fmt.Errorf("read backup: %w", err)
+	}
+	cfg, err := Load(bytes.NewReader(data))
+	if err != nil {
+		return nil, Config{}, err
+	}
+	return data, cfg, nil
 }

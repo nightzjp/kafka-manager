@@ -7,3 +7,6 @@ export type ConsumerGroup={Name:string;State:string;Protocol:string;MemberCount:
 export type KafkaClusterConfig={id:string;name:string;brokers:string[];enabled?:boolean;security:{protocol:string;mechanism?:string;username?:string;password?:string;tls?:boolean}};
 export type AppConfig={server:{listenAddress:string;username:string;passwordHash:string;sessionHours:number};clusters:KafkaClusterConfig[];audit:{enabled?:boolean;directory:string;retentionDays:number;maxFileSizeMB:number};dashboard:{sampleIntervalSeconds:number;historyPoints:number}};
 export type AuditEntry={timestamp:string;username:string;clientIp?:string;clusterId?:string;action:string;resource?:string;result:string;durationMs?:number;error?:string};
+export type ConfigBackup={id:string;createdAt:string;size:number};
+export type TopicConfig={name:string;value:string|null;sensitive:boolean;source:string};
+export type DashboardPoint={timestamp:number;totalLag:number;partitions:number;topics:number};

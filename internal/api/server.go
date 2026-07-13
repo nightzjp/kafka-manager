@@ -29,11 +29,12 @@ type Server struct {
 	secret      []byte
 	auditWriter *audit.Writer
 	auditDir    string
+	history     map[string][]dashboardPoint
 	handler     http.Handler
 }
 
 func NewServer(cfg config.Config, store *config.Store, clusters *cluster.Manager, sessionKey []byte) *Server {
-	s := &Server{cfg: cfg, store: store, clusters: clusters, secret: append([]byte(nil), sessionKey...)}
+	s := &Server{cfg: cfg, store: store, clusters: clusters, secret: append([]byte(nil), sessionKey...), history: make(map[string][]dashboardPoint)}
 	mux := http.NewServeMux()
 	authHandler := NewAuthHandler(cfg.Server.Username, cfg.Server.PasswordHash, auth.NewSessionManager(sessionKey, time.Duration(cfg.Server.SessionHours)*time.Hour))
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
@@ -45,12 +46,17 @@ func NewServer(cfg config.Config, store *config.Store, clusters *cluster.Manager
 	protected.HandleFunc("GET /api/v1/dashboard", s.dashboard)
 	protected.HandleFunc("GET /api/v1/config", s.getConfig)
 	protected.HandleFunc("PUT /api/v1/config", s.putConfig)
+	protected.HandleFunc("GET /api/v1/config/backups", s.listConfigBackups)
+	protected.HandleFunc("POST /api/v1/config/backups/{backup...}", s.restoreConfigBackup)
 	protected.HandleFunc("GET /api/v1/audit", s.listAudit)
 	protected.HandleFunc("GET /api/v1/clusters/{cluster}/topics", s.listTopics)
 	protected.HandleFunc("POST /api/v1/clusters/{cluster}/topics", s.createTopic)
 	protected.HandleFunc("DELETE /api/v1/clusters/{cluster}/topics/{topic}", s.deleteTopic)
 	protected.HandleFunc("POST /api/v1/clusters/{cluster}/topics/{topic}/partitions", s.addPartitions)
+	protected.HandleFunc("GET /api/v1/clusters/{cluster}/topics/{topic}/configs", s.listTopicConfigs)
+	protected.HandleFunc("PUT /api/v1/clusters/{cluster}/topics/{topic}/configs", s.alterTopicConfigs)
 	protected.HandleFunc("GET /api/v1/clusters/{cluster}/messages", s.listMessages)
+	protected.HandleFunc("GET /api/v1/clusters/{cluster}/messages/stream", s.streamMessages)
 	protected.HandleFunc("POST /api/v1/clusters/{cluster}/messages", s.produceMessage)
 	protected.HandleFunc("GET /api/v1/clusters/{cluster}/consumer-groups", s.listConsumerGroups)
 	protected.HandleFunc("POST /api/v1/clusters/{cluster}/consumer-groups/{group}/reset", s.resetConsumerGroup)
@@ -107,10 +113,6 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_config", err.Error())
 		return
 	}
-	if err := s.clusters.Apply(r.Context(), candidate.Clusters); err != nil {
-		writeError(w, 400, "connection_failed", err.Error())
-		return
-	}
 	persisted := candidate
 	persisted.Clusters = append([]config.ClusterConfig(nil), candidate.Clusters...)
 	for i := range persisted.Clusters {
@@ -128,11 +130,60 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "encode_config", err.Error())
 		return
 	}
+	if err := s.clusters.Apply(r.Context(), candidate.Clusters); err != nil {
+		writeError(w, 400, "connection_failed", err.Error())
+		return
+	}
 	if _, err := s.store.Save(data); err != nil {
+		_ = s.clusters.Apply(context.Background(), current.Clusters)
 		writeError(w, 500, "save_config", err.Error())
 		return
 	}
 	s.UpdateConfig(candidate)
+	s.recordAudit(r, "config.update", "config.yaml", nil)
+	w.WriteHeader(204)
+}
+func (s *Server) listConfigBackups(w http.ResponseWriter, _ *http.Request) {
+	if s.store == nil {
+		writeError(w, 503, "config_read_only", "配置文件不可写")
+		return
+	}
+	items, err := s.store.ListBackups()
+	if err != nil {
+		writeError(w, 500, "backup_list", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": items})
+}
+func (s *Server) restoreConfigBackup(w http.ResponseWriter, r *http.Request) {
+	if s.store == nil {
+		writeError(w, 503, "config_read_only", "配置文件不可写")
+		return
+	}
+	data, persisted, err := s.store.LoadBackup(r.PathValue("backup"))
+	if err != nil {
+		writeError(w, 400, "backup_restore", err.Error())
+		return
+	}
+	runtimeCfg, err := config.Runtime(persisted, s.secret)
+	if err != nil {
+		writeError(w, 400, "backup_decrypt", err.Error())
+		return
+	}
+	if err := s.clusters.Apply(r.Context(), runtimeCfg.Clusters); err != nil {
+		writeError(w, 400, "connection_failed", err.Error())
+		return
+	}
+	if _, err = s.store.Save(data); err != nil {
+		s.mu.RLock()
+		current := s.cfg
+		s.mu.RUnlock()
+		_ = s.clusters.Apply(context.Background(), current.Clusters)
+		writeError(w, 500, "backup_restore", err.Error())
+		return
+	}
+	s.UpdateConfig(runtimeCfg)
+	s.recordAudit(r, "config.restore", r.PathValue("backup"), nil)
 	w.WriteHeader(204)
 }
 func (s *Server) clusterConfig(id string) (config.ClusterConfig, bool) {
@@ -170,6 +221,12 @@ type clusterSummary struct {
 	UnderReplicated int    `json:"underReplicated"`
 	TotalLag        int64  `json:"totalLag"`
 }
+type dashboardPoint struct {
+	Timestamp  int64 `json:"timestamp"`
+	TotalLag   int64 `json:"totalLag"`
+	Partitions int   `json:"partitions"`
+	Topics     int   `json:"topics"`
+}
 
 func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
@@ -181,7 +238,34 @@ func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
-func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) { s.listClusters(w, r) }
+func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	configs := append([]config.ClusterConfig(nil), s.cfg.Clusters...)
+	points := s.cfg.Dashboard.HistoryPoints
+	s.mu.RUnlock()
+	if points < 2 {
+		points = 20
+	}
+	items := make([]clusterSummary, 0, len(configs))
+	now := time.Now().UnixMilli()
+	for _, cfg := range configs {
+		items = append(items, s.snapshot(r.Context(), cfg))
+	}
+	s.mu.Lock()
+	for _, item := range items {
+		history := append(s.history[item.ID], dashboardPoint{Timestamp: now, TotalLag: item.TotalLag, Partitions: item.Partitions, Topics: item.Topics})
+		if len(history) > points {
+			history = history[len(history)-points:]
+		}
+		s.history[item.ID] = history
+	}
+	history := make(map[string][]dashboardPoint, len(s.history))
+	for id, values := range s.history {
+		history[id] = append([]dashboardPoint(nil), values...)
+	}
+	s.mu.Unlock()
+	writeJSON(w, 200, map[string]any{"items": items, "history": history})
+}
 func (s *Server) snapshot(parent context.Context, cfg config.ClusterConfig) clusterSummary {
 	result := clusterSummary{ID: cfg.ID, Name: cfg.Name}
 	client, ok := s.clusters.Kafka(cfg.ID)
@@ -292,7 +376,42 @@ func (s *Server) addPartitions(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	if err := topicService.NewService(topicService.NewKadmAdmin(admin)).AddPartitions(r.Context(), r.PathValue("topic"), request.Count); err != nil {
+	err = topicService.NewService(topicService.NewKadmAdmin(admin)).AddPartitions(r.Context(), r.PathValue("topic"), request.Count)
+	s.recordAudit(r, "topic.partitions.add", r.PathValue("topic"), err)
+	if err != nil {
+		writeKafkaError(w, err)
+		return
+	}
+	w.WriteHeader(204)
+}
+func (s *Server) listTopicConfigs(w http.ResponseWriter, r *http.Request) {
+	admin, _, err := s.kafka(r.PathValue("cluster"))
+	if err != nil {
+		writeError(w, 503, "cluster_unavailable", err.Error())
+		return
+	}
+	items, err := topicService.NewService(topicService.NewKadmAdmin(admin)).Configs(r.Context(), r.PathValue("topic"))
+	if err != nil {
+		writeKafkaError(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"items": items})
+}
+func (s *Server) alterTopicConfigs(w http.ResponseWriter, r *http.Request) {
+	admin, _, err := s.kafka(r.PathValue("cluster"))
+	if err != nil {
+		writeError(w, 503, "cluster_unavailable", err.Error())
+		return
+	}
+	var request struct {
+		Configs map[string]*string `json:"configs"`
+	}
+	if !decodeJSON(w, r, &request) {
+		return
+	}
+	err = topicService.NewService(topicService.NewKadmAdmin(admin)).AlterConfigs(r.Context(), r.PathValue("topic"), request.Configs)
+	s.recordAudit(r, "topic.config.alter", r.PathValue("topic"), err)
+	if err != nil {
 		writeKafkaError(w, err)
 		return
 	}
@@ -313,6 +432,40 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"items": items})
+}
+func (s *Server) streamMessages(w http.ResponseWriter, r *http.Request) {
+	_, cfg, err := s.kafka(r.PathValue("cluster"))
+	if err != nil {
+		writeError(w, 503, "cluster_unavailable", err.Error())
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, 500, "stream_unsupported", "服务器不支持消息流")
+		return
+	}
+	client, _ := s.clusters.Kafka(cfg.ID)
+	q := messageService.Query{Topic: r.URL.Query().Get("topic"), Partition: int32(intQuery(r, "partition", -1)), Mode: "live", Limit: 500}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher.Flush()
+	err = messageService.NewService(messageService.NewKafkaBackend(cfg, client)).Stream(r.Context(), q, func(record messageService.Record) error {
+		data, encodeErr := json.Marshal(record)
+		if encodeErr != nil {
+			return encodeErr
+		}
+		if _, writeErr := fmt.Fprintf(w, "data: %s\n\n", data); writeErr != nil {
+			return writeErr
+		}
+		flusher.Flush()
+		return nil
+	})
+	if err != nil && r.Context().Err() == nil {
+		data, _ := json.Marshal(map[string]string{"error": err.Error()})
+		_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", data)
+		flusher.Flush()
+	}
 }
 func (s *Server) produceMessage(w http.ResponseWriter, r *http.Request) {
 	_, cfg, err := s.kafka(r.PathValue("cluster"))
@@ -371,7 +524,9 @@ func (s *Server) deleteConsumerGroup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 503, "cluster_unavailable", err.Error())
 		return
 	}
-	if err := consumerService.NewService(consumerService.NewKadmBackend(admin)).Delete(r.Context(), r.PathValue("group")); err != nil {
+	err = consumerService.NewService(consumerService.NewKadmBackend(admin)).Delete(r.Context(), r.PathValue("group"))
+	s.recordAudit(r, "consumer.group.delete", r.PathValue("group"), err)
+	if err != nil {
 		writeKafkaError(w, err)
 		return
 	}

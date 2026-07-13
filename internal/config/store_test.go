@@ -85,3 +85,43 @@ func TestRuntimeDecryptsKafkaPasswords(t *testing.T) {
 		t.Fatal("Runtime mutated persisted config")
 	}
 }
+
+func TestStoreListsAndRestoresBackup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	first := []byte("server:\n  username: admin\n  passwordHash: hash\nclusters:\n  - id: dev\n    name: Dev\n    brokers: [\"localhost:9092\"]\n")
+	if err := os.WriteFile(path, first, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(path, filepath.Join(dir, "backups"))
+	store.now = func() time.Time { return time.Date(2026, 7, 13, 11, 0, 0, 0, time.Local) }
+	second := []byte(strings.Replace(string(first), "9092", "9093", 1))
+	if _, err := store.Save(second); err != nil {
+		t.Fatal(err)
+	}
+	backups, err := store.ListBackups()
+	if err != nil || len(backups) != 1 {
+		t.Fatalf("backups=%v err=%v", backups, err)
+	}
+	cfg, err := store.Restore(backups[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Clusters[0].Brokers[0] != "localhost:9092" {
+		t.Fatalf("restored=%v", cfg.Clusters[0].Brokers)
+	}
+}
+func TestStoreRejectsBackupTraversal(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "config.yaml"), t.TempDir())
+	if _, err := store.Restore("../../secret"); err == nil {
+		t.Fatal("path traversal accepted")
+	}
+}
+
+func TestStoreReturnsEmptyBackupListWhenDirectoryIsMissing(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "config.yaml"), filepath.Join(t.TempDir(), "missing"))
+	items, err := store.ListBackups()
+	if err != nil || items == nil || len(items) != 0 {
+		t.Fatalf("ListBackups() = %#v, %v", items, err)
+	}
+}

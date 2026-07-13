@@ -26,12 +26,20 @@ type CreateRequest struct {
 	ReplicationFactor int16             `json:"replicationFactor"`
 	Configs           map[string]string `json:"configs,omitempty"`
 }
+type Config struct {
+	Name      string  `json:"name"`
+	Value     *string `json:"value"`
+	Sensitive bool    `json:"sensitive"`
+	Source    string  `json:"source"`
+}
 
 type Admin interface {
 	List(context.Context) ([]Topic, error)
 	Create(context.Context, CreateRequest) error
 	Delete(context.Context, string) error
 	AddPartitions(context.Context, string, int) error
+	Configs(context.Context, string) ([]Config, error)
+	AlterConfigs(context.Context, string, map[string]*string) error
 }
 
 type Service struct{ admin Admin }
@@ -96,6 +104,26 @@ func (s *Service) AddPartitions(ctx context.Context, name string, count int) err
 	}
 	return s.admin.AddPartitions(ctx, name, count)
 }
+func (s *Service) Configs(ctx context.Context, name string) ([]Config, error) {
+	if strings.TrimSpace(name) == "" {
+		return nil, fmt.Errorf("topic name is required")
+	}
+	return s.admin.Configs(ctx, name)
+}
+func (s *Service) AlterConfigs(ctx context.Context, name string, changes map[string]*string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("topic name is required")
+	}
+	if len(changes) == 0 {
+		return fmt.Errorf("at least one config change is required")
+	}
+	for key := range changes {
+		if strings.TrimSpace(key) == "" {
+			return fmt.Errorf("config name is required")
+		}
+	}
+	return s.admin.AlterConfigs(ctx, name, changes)
+}
 
 type KadmAdmin struct{ client *kadm.Client }
 
@@ -137,4 +165,43 @@ func (a *KadmAdmin) AddPartitions(ctx context.Context, name string, count int) e
 		return err
 	}
 	return responses.Error()
+}
+func (a *KadmAdmin) Configs(ctx context.Context, name string) ([]Config, error) {
+	resources, err := a.client.DescribeTopicConfigs(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	resource, err := resources.On(name, nil)
+	if err != nil {
+		return nil, err
+	}
+	if resource.Err != nil {
+		return nil, resource.Err
+	}
+	items := make([]Config, 0, len(resource.Configs))
+	for _, item := range resource.Configs {
+		items = append(items, Config{Name: item.Key, Value: item.Value, Sensitive: item.Sensitive, Source: item.Source.String()})
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].Name < items[j].Name })
+	return items, nil
+}
+func (a *KadmAdmin) AlterConfigs(ctx context.Context, name string, changes map[string]*string) error {
+	configs := make([]kadm.AlterConfig, 0, len(changes))
+	for key, value := range changes {
+		op := kadm.SetConfig
+		if value == nil {
+			op = kadm.DeleteConfig
+		}
+		configs = append(configs, kadm.AlterConfig{Op: op, Name: key, Value: value})
+	}
+	sort.Slice(configs, func(i, j int) bool { return configs[i].Name < configs[j].Name })
+	responses, err := a.client.AlterTopicConfigs(ctx, configs, name)
+	if err != nil {
+		return err
+	}
+	response, err := responses.On(name, nil)
+	if err != nil {
+		return err
+	}
+	return response.Err
 }

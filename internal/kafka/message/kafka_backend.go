@@ -82,7 +82,7 @@ func (b *KafkaBackend) resolveOffset(ctx context.Context, admin *kadm.Client, q 
 	switch q.Mode {
 	case "earliest":
 		listed, err = admin.ListStartOffsets(ctx, q.Topic)
-	case "latest":
+	case "latest", "live":
 		listed, err = admin.ListEndOffsets(ctx, q.Topic)
 	case "timestamp":
 		listed, err = admin.ListOffsetsAfterMilli(ctx, q.Timestamp, q.Topic)
@@ -103,6 +103,63 @@ func (b *KafkaBackend) resolveOffset(ctx context.Context, admin *kadm.Client, q 
 	}
 	return at, nil
 }
+func (b *KafkaBackend) Stream(ctx context.Context, q Query, send func(Record) error) error {
+	q.Mode = "live"
+	admin := kadm.NewClient(b.producer)
+	partitions := []int32{q.Partition}
+	if q.Partition == -1 {
+		details, err := admin.ListTopics(ctx, q.Topic)
+		if err != nil {
+			return err
+		}
+		detail, ok := details[q.Topic]
+		if !ok {
+			return fmt.Errorf("topic not found")
+		}
+		partitions = detail.Partitions.Numbers()
+	}
+	assignment := map[string]map[int32]kgo.Offset{q.Topic: {}}
+	for _, partition := range partitions {
+		offset, err := b.resolveOffset(ctx, admin, q, partition)
+		if err != nil {
+			return err
+		}
+		assignment[q.Topic][partition] = kgo.NewOffset().At(offset)
+	}
+	opts, err := cluster.Options(b.cfg)
+	if err != nil {
+		return err
+	}
+	opts = append(opts, kgo.ConsumePartitions(assignment), kgo.FetchMaxBytes(20*1024*1024))
+	consumer, err := kgo.NewClient(opts...)
+	if err != nil {
+		return err
+	}
+	defer consumer.Close()
+	for {
+		batch := consumer.PollRecords(ctx, 100)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if errs := batch.Errors(); len(errs) > 0 {
+			return errs[0].Err
+		}
+		var sendErr error
+		batch.EachRecord(func(record *kgo.Record) {
+			if sendErr != nil {
+				return
+			}
+			headers := make([]Header, 0, len(record.Headers))
+			for _, h := range record.Headers {
+				headers = append(headers, Header{Key: h.Key, Value: string(h.Value)})
+			}
+			sendErr = send(Record{Topic: record.Topic, Partition: record.Partition, Offset: record.Offset, Timestamp: record.Timestamp.UnixMilli(), Key: string(record.Key), Value: string(record.Value), Headers: headers})
+		})
+		if sendErr != nil {
+			return sendErr
+		}
+	}
+}
 func (b *KafkaBackend) Produce(ctx context.Context, r ProduceRequest) (Record, error) {
 	headers := make([]kgo.RecordHeader, 0, len(r.Headers))
 	for _, h := range r.Headers {
@@ -112,7 +169,21 @@ func (b *KafkaBackend) Produce(ctx context.Context, r ProduceRequest) (Record, e
 	if r.Partition >= 0 {
 		record.Partition = r.Partition
 	}
-	result, err := b.producer.ProduceSync(ctx, record).First()
+	producer := b.producer
+	if r.Partition >= 0 {
+		opts, err := cluster.Options(b.cfg)
+		if err != nil {
+			return Record{}, err
+		}
+		opts = append(opts, kgo.RecordPartitioner(kgo.ManualPartitioner()))
+		manual, err := kgo.NewClient(opts...)
+		if err != nil {
+			return Record{}, err
+		}
+		defer manual.Close()
+		producer = manual
+	}
+	result, err := producer.ProduceSync(ctx, record).First()
 	if err != nil {
 		return Record{}, err
 	}

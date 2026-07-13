@@ -4,11 +4,11 @@
 
 ## 功能
 
-- 多集群状态首页：Broker、Topic、Partition、Consumer Group、ISR 异常和总 Lag。
-- Topic：搜索、详情、创建、删除和扩分区 API。
-- 消息：按 Partition、起始位置、Offset 或时间读取，查看 Key、Value、Headers，并生产测试消息。
+- 多集群状态首页：Broker、Topic、Partition、Consumer Group、ISR 异常、总 Lag 和短期 Lag 趋势。
+- Topic：搜索、详情、创建、删除、扩分区和运行配置修改。
+- 消息：按 Partition、起始位置、Offset 或时间读取，SSE 实时跟随，查看 Key、Value、Headers，并生产测试消息。
 - Consumer Group：成员、分区 Lag、删除和 Offset 重置。
-- 配置：Web 编辑、连接验证、密码加密、YAML 原子写回、备份和热加载。
+- 配置：Web 编辑、连接验证、密码加密、YAML 原子写回、备份、Web 回滚和热加载。
 - 安全：单用户登录、Argon2id、签名 Cookie、登录限速和危险操作审计。
 - 审计：按日期目录保存，按文件大小轮转并自动清理。
 

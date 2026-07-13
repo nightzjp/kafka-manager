@@ -8,6 +8,12 @@ import (
 type fakeBackend struct {
 	query    Query
 	produced ProduceRequest
+	streamed Query
+}
+
+func (f *fakeBackend) Stream(_ context.Context, q Query, send func(Record) error) error {
+	f.streamed = q
+	return send(Record{Topic: q.Topic})
 }
 
 func (f *fakeBackend) Fetch(_ context.Context, q Query) ([]Record, error) {
@@ -40,5 +46,19 @@ func TestQueryRejectsInvalidInput(t *testing.T) {
 func TestProduceRequiresTopic(t *testing.T) {
 	if _, err := NewService(&fakeBackend{}).Produce(context.Background(), ProduceRequest{}); err == nil {
 		t.Fatal("empty topic accepted")
+	}
+}
+func TestStreamValidatesAndUsesBoundedQuery(t *testing.T) {
+	backend := &fakeBackend{}
+	var received Record
+	err := NewService(backend).Stream(context.Background(), Query{Topic: "orders", Partition: -1, Mode: "latest", Limit: 900}, func(record Record) error {
+		received = record
+		return nil
+	})
+	if err != nil || received.Topic != "orders" || backend.streamed.Limit != 500 {
+		t.Fatalf("Stream() record=%+v query=%+v err=%v", received, backend.streamed, err)
+	}
+	if err := NewService(backend).Stream(context.Background(), Query{}, func(Record) error { return nil }); err == nil {
+		t.Fatal("accepted invalid stream query")
 	}
 }

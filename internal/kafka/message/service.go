@@ -36,29 +36,37 @@ type ProduceRequest struct {
 type Backend interface {
 	Fetch(context.Context, Query) ([]Record, error)
 	Produce(context.Context, ProduceRequest) (Record, error)
+	Stream(context.Context, Query, func(Record) error) error
 }
 type Service struct{ backend Backend }
 
 func NewService(backend Backend) *Service { return &Service{backend: backend} }
 func (s *Service) Query(ctx context.Context, q Query) ([]Record, error) {
+	q, err := validateQuery(q)
+	if err != nil {
+		return nil, err
+	}
+	return s.backend.Fetch(ctx, q)
+}
+func validateQuery(q Query) (Query, error) {
 	if strings.TrimSpace(q.Topic) == "" {
-		return nil, fmt.Errorf("topic is required")
+		return q, fmt.Errorf("topic is required")
 	}
 	if q.Partition < -1 {
-		return nil, fmt.Errorf("partition is invalid")
+		return q, fmt.Errorf("partition is invalid")
 	}
 	switch q.Mode {
-	case "earliest", "latest":
+	case "earliest", "latest", "live":
 	case "offset":
 		if q.Offset < 0 {
-			return nil, fmt.Errorf("offset must not be negative")
+			return q, fmt.Errorf("offset must not be negative")
 		}
 	case "timestamp":
 		if q.Timestamp <= 0 {
-			return nil, fmt.Errorf("timestamp is required")
+			return q, fmt.Errorf("timestamp is required")
 		}
 	default:
-		return nil, fmt.Errorf("unsupported query mode %q", q.Mode)
+		return q, fmt.Errorf("unsupported query mode %q", q.Mode)
 	}
 	if q.Limit < 1 {
 		q.Limit = 100
@@ -66,7 +74,14 @@ func (s *Service) Query(ctx context.Context, q Query) ([]Record, error) {
 	if q.Limit > 500 {
 		q.Limit = 500
 	}
-	return s.backend.Fetch(ctx, q)
+	return q, nil
+}
+func (s *Service) Stream(ctx context.Context, q Query, send func(Record) error) error {
+	q, err := validateQuery(q)
+	if err != nil {
+		return err
+	}
+	return s.backend.Stream(ctx, q, send)
 }
 func (s *Service) Produce(ctx context.Context, r ProduceRequest) (Record, error) {
 	if strings.TrimSpace(r.Topic) == "" {

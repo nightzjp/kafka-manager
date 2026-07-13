@@ -1,0 +1,4 @@
+.backups { margin-top: 18px; background: #fff; border: 1px solid var(--line); padding: 20px; }
+.backups h3 { margin-top: 0; }
+.backups > div { display: grid; grid-template-columns: 1fr 1fr auto; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.backups span { font-size: 11px; color: var(--muted); }
