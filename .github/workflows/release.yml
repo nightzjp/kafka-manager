@@ -1,0 +1,33 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+          - os: linux
+            arch: arm64
+          - os: darwin
+            arch: amd64
+          - os: darwin
+            arch: arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: {go-version: '1.25.x'}
+      - uses: pnpm/action-setup@v4
+        with: {version: 10}
+      - uses: actions/setup-node@v4
+        with: {node-version: 22}
+      - run: pnpm --dir web install --frozen-lockfile && pnpm --dir web build
+      - run: mkdir -p internal/webassets/dist-built && cp -R web/dist/. internal/webassets/dist-built/
+      - run: GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -trimpath -ldflags='-s -w' -o kafka-manager-${{ matrix.os }}-${{ matrix.arch }} ./cmd/kafka-manager
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kafka-manager-${{ matrix.os }}-${{ matrix.arch }}
+          path: kafka-manager-${{ matrix.os }}-${{ matrix.arch }}
