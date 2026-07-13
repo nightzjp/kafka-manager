@@ -59,3 +59,31 @@ export function Dialog({ title, children, onClose }: { title: string; children: 
   }, [onClose]);
   return <div className="scrim" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section ref={dialog} className="dialog" role="dialog" aria-modal="true" aria-label={title}><header><span>{title}</span><button className="icon-button" aria-label="关闭" onClick={onClose}><Icon name="close" /></button></header>{children}</section></div>;
 }
+
+export function Drawer({ title, subtitle, children, onClose }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void }) {
+  const drawer = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const oldOverflow = document.body.style.overflow;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    document.body.style.overflow = 'hidden';
+    const focusable = () => Array.from(drawer.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || []);
+    focusable()[0]?.focus();
+    const key = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') { onClose(); return; }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    addEventListener('keydown', key);
+    return () => { document.body.style.overflow = oldOverflow; removeEventListener('keydown', key); previous?.focus(); };
+  }, [onClose]);
+  return <div className="drawer-scrim" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <aside ref={drawer} className="drawer" role="dialog" aria-modal="true" aria-label={title}>
+      <header className="drawer-header"><div><span className="section-code">CONSUMER GROUP</span><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div><button className="icon-button" aria-label="关闭" onClick={onClose}><Icon name="close" /></button></header>
+      {children}
+    </aside>
+  </div>;
+}
