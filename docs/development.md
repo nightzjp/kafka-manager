@@ -9,7 +9,7 @@ CONFIG=./config.dev.yaml make dev-backend
 等价命令：
 
 ```bash
-go run ./cmd/kafka-manager --config ./config.dev.yaml
+go run . --config ./config.dev.yaml
 ```
 
 ## 前端
@@ -34,7 +34,7 @@ pnpm --dir web build
 
 ## 目录
 
-- `cmd/kafka-manager`：启动、信号和生命周期。
+- `main.go`：启动、信号和生命周期。
 - `internal/api`：REST API 与认证边界。
 - `internal/cluster`：franz-go 客户端池。
 - `internal/kafka`：Topic、消息和 Consumer Group 服务。

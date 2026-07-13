@@ -25,7 +25,7 @@
 **Files:**
 - Create: `.gitignore`
 - Create: `go.mod`
-- Create: `cmd/kafka-manager/main.go`
+- Create: `main.go`
 - Create: `internal/app/app.go`
 - Create: `internal/app/app_test.go`
 - Create: `web/package.json`
@@ -285,7 +285,7 @@
 - Create: `internal/webassets/embed.go`
 - Create: `internal/webassets/handler.go`
 - Create: `internal/webassets/handler_test.go`
-- Modify: `cmd/kafka-manager/main.go`
+- Modify: `main.go`
 - Modify: `Makefile`
 - Create: `.github/workflows/ci.yml`
 - Create: `.github/workflows/release.yml`
@@ -326,7 +326,7 @@
 
 ## 最终验收标准
 
-- `go run ./cmd/kafka-manager --config ./config.dev.yaml` 可用于后端调试。
+- `go run . --config ./config.dev.yaml` 可用于后端调试。
 - `pnpm --dir web dev` 可用于前端热更新调试。
 - `make build` 生成包含前端的单个 Go 二进制。
 - `./kafka-manager --config ./config.yaml` 是正式部署唯一必需命令。

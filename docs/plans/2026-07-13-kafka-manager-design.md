@@ -57,7 +57,7 @@ Go 单体服务
 
 ```text
 kafka-manager/
-├── cmd/kafka-manager/       # 程序入口
+├── main.go                  # 程序入口
 ├── internal/
 │   ├── api/                 # HTTP 路由、校验和响应
 │   ├── auth/                # 登录、会话和密码校验
@@ -154,7 +154,7 @@ data/audit/2026-07-13/audit-002.jsonl
 后端开发：
 
 ```bash
-go run ./cmd/kafka-manager --config ./config.dev.yaml
+go run . --config ./config.dev.yaml
 ```
 
 前端开发：
