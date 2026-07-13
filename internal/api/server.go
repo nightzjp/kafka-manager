@@ -410,21 +410,35 @@ func (s *Server) alterTopicConfigs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
+	q, err := messageQuery(r, "")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_message_filter", err.Error())
+		return
+	}
 	_, cfg, err := s.kafka(r.PathValue("cluster"))
 	if err != nil {
 		writeError(w, 503, "cluster_unavailable", err.Error())
 		return
 	}
 	client, _ := s.clusters.Kafka(cfg.ID)
-	q := messageService.Query{Topic: r.URL.Query().Get("topic"), Partition: int32(intQuery(r, "partition", -1)), Mode: r.URL.Query().Get("mode"), Offset: int64Query(r, "offset", 0), Timestamp: int64Query(r, "timestamp", 0), Limit: intQuery(r, "limit", 100)}
-	items, err := messageService.NewService(messageService.NewKafkaBackend(cfg, client)).Query(r.Context(), q)
+	result, err := messageService.NewService(messageService.NewKafkaBackend(cfg, client)).Query(r.Context(), q)
 	if err != nil {
 		writeKafkaError(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"items": items})
+	writeJSON(w, 200, result)
 }
 func (s *Server) streamMessages(w http.ResponseWriter, r *http.Request) {
+	q, err := messageQuery(r, "live")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_message_filter", err.Error())
+		return
+	}
+	q, err = messageService.ValidateQuery(q)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_message_filter", err.Error())
+		return
+	}
 	_, cfg, err := s.kafka(r.PathValue("cluster"))
 	if err != nil {
 		writeError(w, 503, "cluster_unavailable", err.Error())
@@ -436,7 +450,7 @@ func (s *Server) streamMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client, _ := s.clusters.Kafka(cfg.ID)
-	q := messageService.Query{Topic: r.URL.Query().Get("topic"), Partition: int32(intQuery(r, "partition", -1)), Mode: "live", Limit: 500}
+	q.Limit = 500
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -457,6 +471,31 @@ func (s *Server) streamMessages(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", data)
 		flusher.Flush()
 	}
+}
+
+func messageQuery(r *http.Request, mode string) (messageService.Query, error) {
+	if mode == "" {
+		mode = r.URL.Query().Get("mode")
+	}
+	query := messageService.Query{
+		Topic:         r.URL.Query().Get("topic"),
+		Partition:     int32(intQuery(r, "partition", -1)),
+		Mode:          mode,
+		Offset:        int64Query(r, "offset", 0),
+		Timestamp:     int64Query(r, "timestamp", 0),
+		Limit:         intQuery(r, "limit", 100),
+		ScanLimit:     intQuery(r, "scanLimit", 0),
+		KeyFilter:     r.URL.Query().Get("keyFilter"),
+		KeyOperator:   r.URL.Query().Get("keyOperator"),
+		ValueFilter:   r.URL.Query().Get("valueFilter"),
+		ValueOperator: r.URL.Query().Get("valueOperator"),
+	}
+	if raw := strings.TrimSpace(r.URL.Query().Get("jsonFilters")); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &query.JSONFilters); err != nil {
+			return query, fmt.Errorf("JSON filters are invalid: %w", err)
+		}
+	}
+	return query, nil
 }
 func (s *Server) produceMessage(w http.ResponseWriter, r *http.Request) {
 	_, cfg, err := s.kafka(r.PathValue("cluster"))

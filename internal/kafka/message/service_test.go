@@ -16,9 +16,9 @@ func (f *fakeBackend) Stream(_ context.Context, q Query, send func(Record) error
 	return send(Record{Topic: q.Topic})
 }
 
-func (f *fakeBackend) Fetch(_ context.Context, q Query) ([]Record, error) {
+func (f *fakeBackend) Fetch(_ context.Context, q Query) (QueryResult, error) {
 	f.query = q
-	return []Record{{Topic: q.Topic}}, nil
+	return QueryResult{Items: []Record{{Topic: q.Topic}}}, nil
 }
 func (f *fakeBackend) Produce(_ context.Context, r ProduceRequest) (Record, error) {
 	f.produced = r
@@ -27,12 +27,16 @@ func (f *fakeBackend) Produce(_ context.Context, r ProduceRequest) (Record, erro
 
 func TestQueryAppliesSafeLimit(t *testing.T) {
 	backend := &fakeBackend{}
-	records, err := NewService(backend).Query(context.Background(), Query{Topic: "orders", Partition: 0, Mode: "latest", Limit: 5000})
-	if err != nil || len(records) != 1 {
+	result, err := NewService(backend).Query(context.Background(), Query{Topic: "orders", Partition: 0, Mode: "latest", Limit: 5000})
+	if err != nil || len(result.Items) != 1 {
 		t.Fatal(err)
 	}
-	if backend.query.Limit != 500 {
-		t.Fatalf("limit=%d want 500", backend.query.Limit)
+	if backend.query.Limit != 500 || backend.query.ScanLimit != 500 {
+		t.Fatalf("query=%+v want limit=scanLimit=500", backend.query)
+	}
+	_, err = NewService(backend).Query(context.Background(), Query{Topic: "orders", Partition: 0, Mode: "latest", Limit: 25, KeyFilter: "id"})
+	if err != nil || backend.query.ScanLimit != 5000 {
+		t.Fatalf("filtered query=%+v err=%v", backend.query, err)
 	}
 }
 func TestQueryRejectsInvalidInput(t *testing.T) {

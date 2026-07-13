@@ -21,17 +21,17 @@ func NewKafkaBackend(cfg config.ClusterConfig, producer *kgo.Client) *KafkaBacke
 	return &KafkaBackend{cfg: cfg, producer: producer}
 }
 
-func (b *KafkaBackend) Fetch(ctx context.Context, q Query) ([]Record, error) {
+func (b *KafkaBackend) Fetch(ctx context.Context, q Query) (QueryResult, error) {
 	admin := kadm.NewClient(b.producer)
 	partitions := []int32{q.Partition}
 	if q.Partition == -1 {
 		details, err := admin.ListTopics(ctx, q.Topic)
 		if err != nil {
-			return nil, err
+			return QueryResult{}, err
 		}
 		detail, ok := details[q.Topic]
 		if !ok {
-			return nil, fmt.Errorf("topic not found")
+			return QueryResult{}, fmt.Errorf("topic not found")
 		}
 		partitions = detail.Partitions.Numbers()
 	}
@@ -39,30 +39,30 @@ func (b *KafkaBackend) Fetch(ctx context.Context, q Query) ([]Record, error) {
 	for _, partition := range partitions {
 		offset, err := b.resolveOffset(ctx, admin, q, partition)
 		if err != nil {
-			return nil, err
+			return QueryResult{}, err
 		}
 		assignment[q.Topic][partition] = kgo.NewOffset().At(offset)
 	}
 	opts, err := cluster.Options(b.cfg)
 	if err != nil {
-		return nil, err
+		return QueryResult{}, err
 	}
 	opts = append(opts, kgo.ConsumePartitions(assignment), kgo.FetchMaxBytes(20*1024*1024))
 	consumer, err := kgo.NewClient(opts...)
 	if err != nil {
-		return nil, err
+		return QueryResult{}, err
 	}
 	defer consumer.Close()
-	records := make([]Record, 0, q.Limit)
-	for len(records) < q.Limit {
+	collector := newRecordCollector(q)
+	for !collector.done() {
 		fetchCtx, cancel := context.WithTimeout(ctx, 1200*time.Millisecond)
-		batch := consumer.PollRecords(fetchCtx, q.Limit-len(records))
+		batch := consumer.PollRecords(fetchCtx, collector.remainingScan())
 		pollCtxErr := fetchCtx.Err()
 		cancel()
 		if errs := batch.Errors(); len(errs) > 0 {
 			for _, fetchErr := range errs {
 				if err := pollError(fetchErr.Err, pollCtxErr, ctx.Err()); err != nil {
-					return nil, err
+					return QueryResult{}, err
 				}
 			}
 		}
@@ -70,14 +70,17 @@ func (b *KafkaBackend) Fetch(ctx context.Context, q Query) ([]Record, error) {
 			break
 		}
 		batch.EachRecord(func(record *kgo.Record) {
+			if collector.done() {
+				return
+			}
 			headers := make([]Header, 0, len(record.Headers))
 			for _, h := range record.Headers {
 				headers = append(headers, Header{Key: h.Key, Value: string(h.Value)})
 			}
-			records = append(records, Record{Topic: record.Topic, Partition: record.Partition, Offset: record.Offset, Timestamp: record.Timestamp.UnixMilli(), Key: string(record.Key), Value: string(record.Value), Headers: headers})
+			collector.add(Record{Topic: record.Topic, Partition: record.Partition, Offset: record.Offset, Timestamp: record.Timestamp.UnixMilli(), Key: string(record.Key), Value: string(record.Value), Headers: headers})
 		})
 	}
-	return records, nil
+	return collector.result(), nil
 }
 
 func pollError(fetchErr, pollContextErr, requestContextErr error) error {
@@ -112,7 +115,7 @@ func (b *KafkaBackend) resolveOffset(ctx context.Context, admin *kadm.Client, q 
 	}
 	at := offset.Offset
 	if q.Mode == "latest" {
-		at -= int64(q.Limit)
+		at -= int64(q.ScanLimit)
 		if at < 0 {
 			at = 0
 		}

@@ -56,6 +56,41 @@
 @keyframes feedback-in { from { transform:translateY(8px); opacity:0; } }
 @media(max-width:560px) { .feedback-stack { right:14px; bottom:14px; } .fatal-error { padding:32px 0; } }
 
+.filter-button.active { border-color:color-mix(in srgb,var(--primary) 42%,var(--border)); background:var(--primary-soft); color:var(--primary); }
+.filter-button>span { min-width:18px; height:18px; padding:0 5px; display:grid; place-items:center; border-radius:999px; background:var(--primary); color:#fff; font:600 9px "Fira Code",monospace; }
+.message-filters { margin:-2px 0 12px; padding:16px; border:1px solid color-mix(in srgb,var(--primary) 25%,var(--border)); border-radius:var(--radius); background:var(--surface); box-shadow:var(--shadow); }
+.message-filters>header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }
+.message-filters>header h3 { margin:4px 0; font-size:16px; }
+.message-filters>header p { margin:0; color:var(--muted); font-size:11px; }
+.message-filters>header>div:last-child { display:flex; gap:7px; }
+.text-filter-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.text-filter-grid>label,.json-filter-row label { display:grid; gap:5px; color:var(--muted); font-size:9px; }
+.text-filter-grid>label>div { display:grid; grid-template-columns:120px 1fr; }
+.text-filter-grid select { border-radius:7px 0 0 7px; background:var(--surface-2); }
+.text-filter-grid input { border-left:0; border-radius:0 7px 7px 0; }
+.json-filter-heading { margin:16px 0 9px; display:flex; align-items:end; justify-content:space-between; gap:12px; }
+.json-filter-heading h4 { margin:0 0 4px; font-size:12px; }
+.json-filter-heading span { color:var(--muted); font-size:10px; }
+.json-filter-heading code { color:var(--text); }
+.empty-filter { width:100%; min-height:56px; border:1px dashed var(--border-strong); border-radius:8px; display:flex; align-items:center; justify-content:center; gap:7px; background:var(--surface-2); color:var(--muted); font-size:11px; }
+.empty-filter:hover { border-color:var(--primary); color:var(--primary); }
+.json-filter-list { display:grid; gap:7px; }
+.json-filter-row { display:grid; grid-template-columns:42px minmax(180px,1.3fr) minmax(135px,.7fr) minmax(190px,1fr) 36px; align-items:end; gap:8px; padding:9px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); }
+.and-badge { align-self:center; color:var(--primary); font:600 9px "Fira Code",monospace; text-align:center; }
+.json-filter-row input,.json-filter-row select { height:38px; }
+.remove-filter { color:var(--danger); }
+.message-filters>footer { margin-top:12px; padding-top:12px; border-top:1px solid var(--border); display:flex; align-items:center; gap:12px; }
+.message-filters>footer label { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:10px; white-space:nowrap; }
+.message-filters>footer input { width:105px; height:36px; }
+.message-filters>footer p { margin:0; color:var(--muted); font-size:10px; }
+.filter-result { min-height:42px; margin:0 0 12px; padding:9px 12px; display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--muted); font-size:10px; }
+.filter-result>div { display:flex; align-items:center; gap:9px; }
+.filter-result>div:first-child .icon { color:var(--primary); }
+.filter-result>div:last-child span { padding-left:9px; border-left:1px solid var(--border); }
+.filter-result b { color:var(--text); font-family:"Fira Code",monospace; }
+@media(max-width:900px) { .text-filter-grid { grid-template-columns:1fr; } .json-filter-row { grid-template-columns:36px 1fr 1fr 36px; } .json-filter-row label:nth-of-type(3) { grid-column:2/4; } }
+@media(max-width:620px) { .message-filters { padding:12px; } .message-filters>header,.json-filter-heading,.filter-result { align-items:flex-start; flex-direction:column; } .json-filter-heading .button { width:100%; } .json-filter-row { grid-template-columns:32px 1fr 36px; } .json-filter-row label { grid-column:2; } .json-filter-row .and-badge { grid-row:1/4; grid-column:1; } .json-filter-row .remove-filter { grid-row:1; grid-column:3; } .message-filters>footer { align-items:flex-start; flex-direction:column; } .filter-result>div:last-child { flex-wrap:wrap; } }
+
 .consumer-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
 .diagnostic-metric { min-height:92px; padding:16px 18px; display:flex; align-items:flex-end; justify-content:space-between; gap:12px; border:1px solid var(--border); border-top:2px solid var(--border-strong); border-radius:10px; background:var(--surface); }
 .diagnostic-metric>div { display:grid; gap:4px; }
