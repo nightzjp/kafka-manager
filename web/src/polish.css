@@ -217,20 +217,24 @@
 /* Desktop navigation can yield more room to Kafka data-heavy workspaces. */
 .sidebar,.workspace { transition:width .2s ease,padding-left .2s ease,transform .2s ease; }
 .sidebar { overflow:visible; }
-.sidebar-toggle { position:absolute; top:82px; right:-14px; z-index:2; width:28px; height:28px; padding:0; display:grid; place-items:center; border:1px solid #ffffff1f; border-radius:8px; background:var(--sidebar); color:var(--sidebar-text); box-shadow:0 7px 18px #02061745; }
-.sidebar-toggle:hover { border-color:#60a5fa; color:#fff; }
+.sidebar-utilities { margin-top:auto; padding:0 12px 14px; display:grid; gap:7px; }
+.sidebar-utilities .sidebar-foot { margin:0; min-height:42px; display:flex; align-items:center; padding:0 12px; }
+.sidebar-toggle { width:100%; height:40px; padding:0 12px; display:flex; align-items:center; gap:10px; border:1px solid #ffffff12; border-radius:8px; background:transparent; color:var(--sidebar-text); font-size:11px; text-align:left; }
+.sidebar-toggle:hover { border-color:#ffffff20; background:#ffffff0b; color:#fff; }
 .sidebar.collapsed { width:72px; }
 .workspace.sidebar-collapsed { padding-left:72px; }
-.sidebar .brand-copy,.sidebar nav button>span,.sidebar-foot-copy { opacity:1; transition:opacity .12s ease; white-space:nowrap; }
+.sidebar .brand-copy,.sidebar nav button>span,.sidebar-foot-copy,.sidebar-toggle-copy { opacity:1; transition:opacity .12s ease; white-space:nowrap; }
 .sidebar.collapsed .brand { gap:0; padding:0 18px; }
-.sidebar.collapsed .brand-copy,.sidebar.collapsed nav button>span,.sidebar.collapsed .sidebar-foot-copy { width:0; overflow:hidden; opacity:0; }
+.sidebar.collapsed .brand-copy,.sidebar.collapsed nav button>span,.sidebar.collapsed .sidebar-foot-copy,.sidebar.collapsed .sidebar-toggle-copy { width:0; overflow:hidden; opacity:0; }
 .sidebar.collapsed nav { padding-inline:10px; }
 .sidebar.collapsed nav button { position:relative; width:52px; justify-content:center; gap:0; padding:0; }
 .sidebar.collapsed nav button.active { box-shadow:inset 3px 0 #3b82f6; }
 .sidebar.collapsed nav button::after { content:attr(data-label); position:absolute; left:calc(100% + 10px); top:50%; z-index:30; padding:7px 9px; border:1px solid #ffffff16; border-radius:7px; background:#111827; color:#f8fafc; box-shadow:0 9px 24px #02061755; font-size:11px; line-height:1; opacity:0; pointer-events:none; transform:translate(-4px,-50%); transition:opacity .14s ease,transform .14s ease; white-space:nowrap; }
 .sidebar.collapsed nav button:hover::after,.sidebar.collapsed nav button:focus-visible::after { opacity:1; transform:translate(0,-50%); }
-.sidebar.collapsed .sidebar-foot { margin-inline:10px; padding:12px 0; display:flex; justify-content:center; }
+.sidebar.collapsed .sidebar-utilities { padding-inline:10px; }
+.sidebar.collapsed .sidebar-foot { padding:0; justify-content:center; }
 .sidebar.collapsed .sidebar-foot .health-dot { margin:0; }
+.sidebar.collapsed .sidebar-toggle { width:52px; justify-content:center; gap:0; padding:0; }
 .workspace-actions { display:flex; align-items:center; gap:8px; }
 
 @media(max-width:820px) {
@@ -242,6 +246,8 @@
   .sidebar.collapsed nav { padding:18px 12px; }
   .sidebar.collapsed nav button { width:auto; justify-content:flex-start; gap:12px; padding:0 12px; }
   .sidebar.collapsed nav button::after { display:none; }
-  .sidebar.collapsed .sidebar-foot { margin:0 16px 18px; padding:12px; display:block; }
+  .sidebar-utilities { padding:0 16px 18px; }
+  .sidebar.collapsed .sidebar-utilities { padding:0 16px 18px; }
+  .sidebar.collapsed .sidebar-foot { padding:0 12px; justify-content:flex-start; }
   .sidebar.collapsed .sidebar-foot .health-dot { margin-right:7px; }
 }

@@ -113,9 +113,11 @@ export function App() {
   return <div className="app-shell">
     <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''} ${menuOpen ? 'open' : ''}`}>
       <div className="brand"><div className="logo-mark">K</div><div className="brand-copy"><b>Kafka Manager</b><span>Developer Console</span></div></div>
-      <button className="sidebar-toggle" aria-label={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} aria-controls="primary-navigation" aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} onClick={() => setSidebarCollapsed((value) => !value)}><Icon name={sidebarCollapsed ? 'arrow' : 'back'} /></button>
       <nav id="primary-navigation">{nav.map((item) => <button key={item.id} data-label={item.label} aria-label={sidebarCollapsed ? item.label : undefined} className={route.page === item.id && !route.topicName ? 'active' : ''} onClick={() => changePage(item.id)}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav>
-      <div className="sidebar-foot"><span className={`health-dot ${clusters.some((cluster) => !cluster.online) ? 'warn' : ''}`} /><span className="sidebar-foot-copy">{clusters.filter((cluster) => cluster.online).length}/{clusters.length} 集群在线</span></div>
+      <div className="sidebar-utilities">
+        <div className="sidebar-foot"><span className={`health-dot ${clusters.some((cluster) => !cluster.online) ? 'warn' : ''}`} /><span className="sidebar-foot-copy">{clusters.filter((cluster) => cluster.online).length}/{clusters.length} 集群在线</span></div>
+        <button className="sidebar-toggle" aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-controls="primary-navigation" aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} onClick={() => setSidebarCollapsed((value) => !value)}><Icon name={sidebarCollapsed ? 'arrow' : 'back'} /><span className="sidebar-toggle-copy">{sidebarCollapsed ? '展开侧栏' : '收起侧栏'}</span></button>
+      </div>
     </aside>
     {menuOpen && <button className="nav-scrim" aria-label="关闭导航" onClick={() => setMenuOpen(false)} />}
     <section className={`workspace ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>

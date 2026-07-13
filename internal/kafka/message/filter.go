@@ -67,8 +67,10 @@ func (collector *recordCollector) add(record Record) bool {
 
 func (collector *recordCollector) result() QueryResult {
 	collector.output.ResultLimited = collector.output.Matched >= collector.query.Limit
-	if collector.query.Mode == "latest" && hasContentFilters(collector.query) {
-		collector.output.ResultLimited = collector.output.Matched > len(collector.output.Items)
+	if collector.query.Mode == "latest" {
+		if hasContentFilters(collector.query) {
+			collector.output.ResultLimited = collector.output.Matched > len(collector.output.Items)
+		}
 		sort.SliceStable(collector.output.Items, func(i, j int) bool { return recordNewer(collector.output.Items[i], collector.output.Items[j]) })
 	}
 	collector.output.ScanLimited = collector.output.Scanned >= collector.query.ScanLimit

@@ -110,4 +110,15 @@ func TestLatestFilteredCollectorKeepsNewestMatchesInTheScanWindow(t *testing.T) 
 	}
 }
 
+func TestLatestCollectorReturnsNewestFirst(t *testing.T) {
+	collector := newRecordCollector(Query{Mode: "latest", Limit: 3, ScanLimit: 3})
+	for offset := int64(1); offset <= 3; offset++ {
+		collector.add(Record{Partition: 0, Offset: offset, Timestamp: offset * 1000})
+	}
+	result := collector.result()
+	if len(result.Items) != 3 || result.Items[0].Offset != 3 || result.Items[1].Offset != 2 || result.Items[2].Offset != 1 {
+		t.Fatalf("latest items are not newest-first: %+v", result.Items)
+	}
+}
+
 func withQuery(query Query, change func(*Query)) Query { change(&query); return query }
