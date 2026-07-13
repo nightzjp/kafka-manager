@@ -1,0 +1,14 @@
+.git
+.github
+.worktrees
+build
+data
+config.yaml
+config.dev.yaml
+web/node_modules
+web/dist
+web/*.tsbuildinfo
+internal/webassets/dist-built
+docs
+*.log
+.DS_Store

@@ -4,9 +4,29 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
+
+func TestStoreFallsBackForBindMountedConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	original := []byte("server:\n  username: admin\n  password: old\nclusters:\n  - id: dev\n    name: Dev\n    brokers: [\"localhost:9092\"]\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(path, filepath.Join(dir, "backups"))
+	store.rename = func(string, string) error { return syscall.EBUSY }
+	updated := []byte(strings.Replace(string(original), "password: old", "password: new", 1))
+	if _, err := store.Save(updated); err != nil {
+		t.Fatalf("Save() on bind mount error = %v", err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || string(after) != string(updated) {
+		t.Fatalf("saved config = %q, %v", after, err)
+	}
+}
 
 func TestEncryptDecrypt(t *testing.T) {
 	key := []byte("0123456789abcdef0123456789abcdef")

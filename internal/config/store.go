@@ -2,12 +2,14 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -21,10 +23,11 @@ type Store struct {
 	path, backupDir string
 	mu              sync.Mutex
 	now             func() time.Time
+	rename          func(string, string) error
 }
 
 func NewStore(path, backupDir string) *Store {
-	return &Store{path: path, backupDir: backupDir, now: time.Now}
+	return &Store{path: path, backupDir: backupDir, now: time.Now, rename: os.Rename}
 }
 
 func (s *Store) Load() (Config, error) {
@@ -80,8 +83,27 @@ func (s *Store) Save(data []byte) (Config, error) {
 	if err := tmp.Close(); err != nil {
 		return Config{}, err
 	}
-	if err := os.Rename(tmpName, s.path); err != nil {
-		return Config{}, fmt.Errorf("replace config: %w", err)
+	if err := s.rename(tmpName, s.path); err != nil {
+		if !errors.Is(err, syscall.EBUSY) {
+			return Config{}, fmt.Errorf("replace config: %w", err)
+		}
+		// Docker cannot rename over a bind-mounted file. Only in that case,
+		// update the existing inode so the host file remains mounted.
+		file, openErr := os.OpenFile(s.path, os.O_WRONLY|os.O_TRUNC, 0o600)
+		if openErr != nil {
+			return Config{}, fmt.Errorf("open bind-mounted config: %w", openErr)
+		}
+		if _, writeErr := file.Write(data); writeErr != nil {
+			file.Close()
+			return Config{}, fmt.Errorf("write bind-mounted config: %w", writeErr)
+		}
+		if syncErr := file.Sync(); syncErr != nil {
+			file.Close()
+			return Config{}, fmt.Errorf("sync bind-mounted config: %w", syncErr)
+		}
+		if closeErr := file.Close(); closeErr != nil {
+			return Config{}, fmt.Errorf("close bind-mounted config: %w", closeErr)
+		}
 	}
 	return cfg, nil
 }

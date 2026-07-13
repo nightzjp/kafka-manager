@@ -28,6 +28,19 @@ cp config.example.yaml config.yaml
 
 打开 `http://localhost:8080`。Kafka 地址、用户名和密码都直接配置在 `config.yaml` 中，不要求额外环境变量。
 
+## Docker Compose
+
+部署服务器只需要 Docker 和 Compose：
+
+```bash
+cp config.example.yaml config.yaml
+chmod 600 config.yaml
+mkdir -p data
+docker compose up -d --build
+```
+
+打开 `http://服务器地址:8080`。Compose 会把宿主机 `config.yaml` 映射到容器，Web 页面修改配置后会直接写回该文件；审计日志和配置备份保存在宿主机 `data/`。
+
 ## 开发
 
 ```bash

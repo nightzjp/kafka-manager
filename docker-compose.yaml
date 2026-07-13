@@ -1,0 +1,23 @@
+services:
+  kafka-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kafka-manager:local
+    container_name: kafka-manager
+    restart: unless-stopped
+    init: true
+    ports:
+      - "8080:8080"
+    volumes:
+      # 必须可写：Web 页面保存集群配置时会原子更新 config.yaml。
+      - ./config.yaml:/app/config.yaml
+      # 持久化审计日志和配置备份。
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    stop_grace_period: 15s
