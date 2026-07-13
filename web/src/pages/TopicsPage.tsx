@@ -5,7 +5,7 @@ import { Dialog, Empty, ErrorNotice, Loading, PageHeader, Status } from '../comp
 import { Icon } from '../components/Icon';
 import { useFeedback } from '../components/Feedback';
 
-export function TopicsPage({ clusterId, onOpen }: { clusterId: string; onOpen: (topic: Topic, tab?: 'overview' | 'messages') => void }) {
+export function TopicsPage({ clusterId, onOpen, readOnly }: { clusterId: string; onOpen: (topic: Topic, tab?: 'overview' | 'messages') => void; readOnly: boolean }) {
   const [items, setItems] = useState<Topic[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -34,7 +34,7 @@ export function TopicsPage({ clusterId, onOpen }: { clusterId: string; onOpen: (
   }
 
   return <>
-    <PageHeader code="TOPICS" title="Topic 工作台" description="查看健康状态，进入 Topic 后直接读取消息、检查分区和修改配置。" actions={<button className="button primary" onClick={() => setCreating(true)}><Icon name="plus" />创建 Topic</button>} />
+    <PageHeader code="TOPICS" title="Topic 工作台" description="查看健康状态，进入 Topic 后直接读取消息、检查分区和修改配置。" actions={<button className="button primary" disabled={readOnly} title={readOnly ? '当前集群为只读模式' : undefined} onClick={() => setCreating(true)}><Icon name="plus" />{readOnly ? '只读集群' : '创建 Topic'}</button>} />
     <div className="toolbar"><label className="search-field"><Icon name="search" /><input aria-label="搜索 Topic" placeholder="按名称筛选 Topic" value={search} onChange={(event) => setSearch(event.target.value)} /></label><span>{items.length} 个 Topic</span></div>
     {error && <ErrorNotice message={error} />}
     {loading ? <Loading /> : items.length === 0 ? <Empty title="没有匹配的 Topic" detail="调整搜索条件，或创建第一个 Topic。" /> : <div className="data-table"><table><thead><tr><th>Topic</th><th>健康状态</th><th>分区</th><th>复制因子</th><th>操作</th></tr></thead><tbody>{items.map((topic) => <tr key={topic.Name}>

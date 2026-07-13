@@ -44,7 +44,7 @@ func Load(reader io.Reader) (Config, error) {
 func defaultConfig() Config {
 	return Config{
 		Server:    ServerConfig{ListenAddress: ":8080", SessionHours: 12},
-		Audit:     AuditConfig{Directory: "./data/audit", RetentionDays: 30, MaxFileSizeMB: 50},
+		Audit:     AuditConfig{Directory: "./data/audit", RetentionDays: 30, MaxFileSizeMB: 50, ConfigBackupRetentionDays: 30},
 		Dashboard: DashboardConfig{SampleIntervalSeconds: 15, HistoryPoints: 240},
 	}
 }

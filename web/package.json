@@ -6,17 +6,19 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest",
+    "test": "vitest --exclude e2e/**",
+    "test:e2e": "playwright test",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
     "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react-dom": "18.3.1",
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "vitest": "latest"

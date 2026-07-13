@@ -20,6 +20,7 @@ type ClusterConfig struct {
 	Name     string         `yaml:"name" json:"name"`
 	Brokers  []string       `yaml:"brokers" json:"brokers"`
 	Enabled  *bool          `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	ReadOnly bool           `yaml:"readOnly,omitempty" json:"readOnly,omitempty"`
 	Security SecurityConfig `yaml:"security" json:"security"`
 }
 
@@ -32,10 +33,11 @@ type SecurityConfig struct {
 }
 
 type AuditConfig struct {
-	Enabled       *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-	Directory     string `yaml:"directory" json:"directory"`
-	RetentionDays int    `yaml:"retentionDays" json:"retentionDays"`
-	MaxFileSizeMB int    `yaml:"maxFileSizeMB" json:"maxFileSizeMB"`
+	Enabled                   *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Directory                 string `yaml:"directory" json:"directory"`
+	RetentionDays             int    `yaml:"retentionDays" json:"retentionDays"`
+	MaxFileSizeMB             int    `yaml:"maxFileSizeMB" json:"maxFileSizeMB"`
+	ConfigBackupRetentionDays int    `yaml:"configBackupRetentionDays" json:"configBackupRetentionDays"`
 }
 
 type DashboardConfig struct {

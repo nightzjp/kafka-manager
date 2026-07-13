@@ -14,6 +14,7 @@ server:
 clusters:
   - id: test
     name: 测试环境
+    readOnly: false
     brokers: ["kafka-test.example.local:9092"]
     security:
       protocol: SASL_PLAINTEXT
@@ -23,6 +24,7 @@ clusters:
 
   - id: internal
     name: 内网环境
+    readOnly: true
     brokers: ["kafka-internal.example.local:9092"]
     security:
       protocol: PLAINTEXT
@@ -32,6 +34,7 @@ audit:
   directory: ./data/audit
   retentionDays: 30
   maxFileSizeMB: 50
+  configBackupRetentionDays: 30
 
 dashboard:
   sampleIntervalSeconds: 15
@@ -51,6 +54,8 @@ dashboard:
 
 SASL 机制支持 `PLAIN`、`SCRAM-SHA-256`、`SCRAM-SHA-512`。
 
+`readOnly: true` 会在服务端禁止创建/删除 Topic、扩分区、修改 Topic 配置、生产消息、重置 Consumer Offset 和删除 Consumer Group；Topic、消息和消费组查询仍可正常使用。该限制由 API 强制执行，不依赖前端按钮状态。
+
 ## 密码
 
 平台登录密码和 Kafka 密码都直接保存在本地 YAML 中；Web 接口不会回显已有密码，留空表示保持原密码。请把配置文件权限设置为 `0600`，并确保 `config.yaml` 不提交到 Git。
@@ -64,4 +69,4 @@ data/audit/2026-07-13/audit-001.jsonl
 data/audit/2026-07-13/audit-002.jsonl
 ```
 
-`retentionDays` 和 `maxFileSizeMB` 均可配置。日志不会记录消息正文、登录密码或 Kafka 密码。
+`retentionDays` 和 `maxFileSizeMB` 控制审计文件，`configBackupRetentionDays` 控制 `data/config-backups/YYYY-MM-DD/` 的保留时间。程序启动时及之后每天清理过期目录。日志不会记录消息正文、登录密码或 Kafka 密码。

@@ -29,7 +29,7 @@ func Marshal(cfg Config) ([]byte, error) {
 `
 	text := body.String()
 	text = replaceSection(text, "clusters:\n", "# Kafka 集群列表\n# protocol: PLAINTEXT / SSL / SASL_PLAINTEXT / SASL_SSL\n# SASL mechanism: PLAIN / SCRAM-SHA-256 / SCRAM-SHA-512\nclusters:\n")
-	text = replaceSection(text, "audit:\n", "# 审计日志：按日期建目录，并按 maxFileSizeMB 轮转\naudit:\n")
+	text = replaceSection(text, "audit:\n", "# 本地数据保留：审计日志按日期和大小轮转，配置备份按天清理\naudit:\n")
 	text = replaceSection(text, "dashboard:\n", "# 首页监控采样：采样间隔（秒）与内存历史点数\ndashboard:\n")
 	return append([]byte(header), []byte(text)...), nil
 }

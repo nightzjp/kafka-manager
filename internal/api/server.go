@@ -199,6 +199,26 @@ func (s *Server) kafka(id string) (*kadm.Client, config.ClusterConfig, error) {
 	return kadm.NewClient(client), cfg, nil
 }
 
+func (s *Server) writableKafka(w http.ResponseWriter, r *http.Request, action, resource string) (*kadm.Client, config.ClusterConfig, bool) {
+	cfg, exists := s.clusterConfig(r.PathValue("cluster"))
+	if !exists {
+		writeError(w, http.StatusServiceUnavailable, "cluster_unavailable", fmt.Sprintf("cluster %q not found", r.PathValue("cluster")))
+		return nil, cfg, false
+	}
+	if cfg.ReadOnly {
+		operationErr := fmt.Errorf("集群 %s 已启用只读模式，禁止执行写操作", cfg.Name)
+		s.recordAudit(r, action, resource, operationErr)
+		writeError(w, http.StatusForbidden, "cluster_read_only", operationErr.Error())
+		return nil, cfg, false
+	}
+	admin, cfg, err := s.kafka(r.PathValue("cluster"))
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "cluster_unavailable", err.Error())
+		return nil, cfg, false
+	}
+	return admin, cfg, true
+}
+
 type clusterSummary struct {
 	ID              string `json:"id"`
 	Name            string `json:"name"`
@@ -211,6 +231,7 @@ type clusterSummary struct {
 	ConsumerGroups  int    `json:"consumerGroups"`
 	UnderReplicated int    `json:"underReplicated"`
 	TotalLag        int64  `json:"totalLag"`
+	ReadOnly        bool   `json:"readOnly"`
 }
 type dashboardPoint struct {
 	Timestamp  int64 `json:"timestamp"`
@@ -258,7 +279,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"items": items, "history": history})
 }
 func (s *Server) snapshot(parent context.Context, cfg config.ClusterConfig) clusterSummary {
-	result := clusterSummary{ID: cfg.ID, Name: cfg.Name}
+	result := clusterSummary{ID: cfg.ID, Name: cfg.Name, ReadOnly: cfg.ReadOnly}
 	client, ok := s.clusters.Kafka(cfg.ID)
 	if !ok {
 		result.Error = "集群未连接"
@@ -323,16 +344,15 @@ func (s *Server) listTopics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"items": items, "total": total, "page": page, "pageSize": size})
 }
 func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
-	admin, _, err := s.kafka(r.PathValue("cluster"))
-	if err != nil {
-		writeError(w, 503, "cluster_unavailable", err.Error())
+	admin, _, ok := s.writableKafka(w, r, "topic.create", "")
+	if !ok {
 		return
 	}
 	var request topicService.CreateRequest
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	err = topicService.NewService(topicService.NewKadmAdmin(admin)).Create(r.Context(), request)
+	err := topicService.NewService(topicService.NewKadmAdmin(admin)).Create(r.Context(), request)
 	s.recordAudit(r, "topic.create", request.Name, err)
 	if err != nil {
 		writeKafkaError(w, err)
@@ -341,13 +361,12 @@ func (s *Server) createTopic(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 201, map[string]string{"status": "created"})
 }
 func (s *Server) deleteTopic(w http.ResponseWriter, r *http.Request) {
-	admin, _, err := s.kafka(r.PathValue("cluster"))
-	if err != nil {
-		writeError(w, 503, "cluster_unavailable", err.Error())
+	name := r.PathValue("topic")
+	admin, _, ok := s.writableKafka(w, r, "topic.delete", name)
+	if !ok {
 		return
 	}
-	name := r.PathValue("topic")
-	err = topicService.NewService(topicService.NewKadmAdmin(admin)).Delete(r.Context(), name)
+	err := topicService.NewService(topicService.NewKadmAdmin(admin)).Delete(r.Context(), name)
 	s.recordAudit(r, "topic.delete", name, err)
 	if err != nil {
 		writeKafkaError(w, err)
@@ -356,9 +375,8 @@ func (s *Server) deleteTopic(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 func (s *Server) addPartitions(w http.ResponseWriter, r *http.Request) {
-	admin, _, err := s.kafka(r.PathValue("cluster"))
-	if err != nil {
-		writeError(w, 503, "cluster_unavailable", err.Error())
+	admin, _, ok := s.writableKafka(w, r, "topic.partitions.add", r.PathValue("topic"))
+	if !ok {
 		return
 	}
 	var request struct {
@@ -367,7 +385,7 @@ func (s *Server) addPartitions(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	err = topicService.NewService(topicService.NewKadmAdmin(admin)).AddPartitions(r.Context(), r.PathValue("topic"), request.Count)
+	err := topicService.NewService(topicService.NewKadmAdmin(admin)).AddPartitions(r.Context(), r.PathValue("topic"), request.Count)
 	s.recordAudit(r, "topic.partitions.add", r.PathValue("topic"), err)
 	if err != nil {
 		writeKafkaError(w, err)
@@ -389,9 +407,8 @@ func (s *Server) listTopicConfigs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"items": items})
 }
 func (s *Server) alterTopicConfigs(w http.ResponseWriter, r *http.Request) {
-	admin, _, err := s.kafka(r.PathValue("cluster"))
-	if err != nil {
-		writeError(w, 503, "cluster_unavailable", err.Error())
+	admin, _, ok := s.writableKafka(w, r, "topic.config.alter", r.PathValue("topic"))
+	if !ok {
 		return
 	}
 	var request struct {
@@ -400,7 +417,7 @@ func (s *Server) alterTopicConfigs(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &request) {
 		return
 	}
-	err = topicService.NewService(topicService.NewKadmAdmin(admin)).AlterConfigs(r.Context(), r.PathValue("topic"), request.Configs)
+	err := topicService.NewService(topicService.NewKadmAdmin(admin)).AlterConfigs(r.Context(), r.PathValue("topic"), request.Configs)
 	s.recordAudit(r, "topic.config.alter", r.PathValue("topic"), err)
 	if err != nil {
 		writeKafkaError(w, err)
@@ -498,9 +515,8 @@ func messageQuery(r *http.Request, mode string) (messageService.Query, error) {
 	return query, nil
 }
 func (s *Server) produceMessage(w http.ResponseWriter, r *http.Request) {
-	_, cfg, err := s.kafka(r.PathValue("cluster"))
-	if err != nil {
-		writeError(w, 503, "cluster_unavailable", err.Error())
+	_, cfg, ok := s.writableKafka(w, r, "message.produce", "")
+	if !ok {
 		return
 	}
 	client, _ := s.clusters.Kafka(cfg.ID)
@@ -530,9 +546,8 @@ func (s *Server) listConsumerGroups(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"items": items})
 }
 func (s *Server) resetConsumerGroup(w http.ResponseWriter, r *http.Request) {
-	admin, _, err := s.kafka(r.PathValue("cluster"))
-	if err != nil {
-		writeError(w, 503, "cluster_unavailable", err.Error())
+	admin, _, ok := s.writableKafka(w, r, "consumer.offset.reset", r.PathValue("group"))
+	if !ok {
 		return
 	}
 	var request consumerService.ResetRequest
@@ -540,7 +555,7 @@ func (s *Server) resetConsumerGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request.Group = r.PathValue("group")
-	err = consumerService.NewService(consumerService.NewKadmBackend(admin)).Reset(r.Context(), request)
+	err := consumerService.NewService(consumerService.NewKadmBackend(admin)).Reset(r.Context(), request)
 	s.recordAudit(r, "consumer.offset.reset", request.Group, err)
 	if err != nil {
 		writeKafkaError(w, err)
@@ -549,12 +564,11 @@ func (s *Server) resetConsumerGroup(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 func (s *Server) deleteConsumerGroup(w http.ResponseWriter, r *http.Request) {
-	admin, _, err := s.kafka(r.PathValue("cluster"))
-	if err != nil {
-		writeError(w, 503, "cluster_unavailable", err.Error())
+	admin, _, ok := s.writableKafka(w, r, "consumer.group.delete", r.PathValue("group"))
+	if !ok {
 		return
 	}
-	err = consumerService.NewService(consumerService.NewKadmBackend(admin)).Delete(r.Context(), r.PathValue("group"))
+	err := consumerService.NewService(consumerService.NewKadmBackend(admin)).Delete(r.Context(), r.PathValue("group"))
 	s.recordAudit(r, "consumer.group.delete", r.PathValue("group"), err)
 	if err != nil {
 		writeKafkaError(w, err)

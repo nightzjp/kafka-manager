@@ -4,7 +4,7 @@ import { useFeedback } from '../components/Feedback';
 import { api } from '../lib/api';
 import { AppConfig, ConfigBackup, KafkaClusterConfig } from '../lib/types';
 
-const blank = (): KafkaClusterConfig => ({ id: '', name: '', brokers: [''], security: { protocol: 'PLAINTEXT' } });
+const blank = (): KafkaClusterConfig => ({ id: '', name: '', brokers: [''], readOnly: false, security: { protocol: 'PLAINTEXT' } });
 
 export function SettingsPage({ onSaved }: { onSaved: () => void }) {
   const [cfg, setCfg] = useState<AppConfig>();
@@ -56,10 +56,11 @@ export function SettingsPage({ onSaved }: { onSaved: () => void }) {
       <label>显示名称<input value={cluster.name} onChange={(event) => update(index, { name: event.target.value })} /></label>
       <label>唯一 ID<input value={cluster.id} onChange={(event) => update(index, { id: event.target.value })} /></label>
       <label>Broker 地址（每行一个）<textarea value={cluster.brokers.join('\n')} onChange={(event) => update(index, { brokers: event.target.value.split('\n').filter(Boolean) })} /></label>
+      <label className="check-field config-readonly"><input type="checkbox" checked={Boolean(cluster.readOnly)} onChange={(event) => update(index, { readOnly: event.target.checked })} />只读模式（禁止所有 Kafka 写操作）</label>
       <label>连接协议<select value={cluster.security.protocol || 'PLAINTEXT'} onChange={(event) => update(index, { security: { ...cluster.security, protocol: event.target.value } })}><option>PLAINTEXT</option><option>SSL</option><option>SASL_PLAINTEXT</option><option>SASL_SSL</option></select></label>
       {cluster.security.protocol.startsWith('SASL') && <><label>认证机制<select value={cluster.security.mechanism || 'SCRAM-SHA-256'} onChange={(event) => update(index, { security: { ...cluster.security, mechanism: event.target.value } })}><option>PLAIN</option><option>SCRAM-SHA-256</option><option>SCRAM-SHA-512</option></select></label><label>用户名<input value={cluster.security.username || ''} onChange={(event) => update(index, { security: { ...cluster.security, username: event.target.value } })} /></label><label>密码<input type="password" placeholder="留空保持原密码" onChange={(event) => update(index, { security: { ...cluster.security, password: event.target.value } })} /></label></>}
     </article>)}<button className="add-cluster" onClick={() => setCfg({ ...cfg, clusters: [...cfg.clusters, blank()] })}><b>＋</b><span>新增 Kafka 集群</span><small>支持无认证、SASL 与 TLS</small></button></div>
-    <section className="retention"><h3>审计保留策略</h3><label>保留天数<input type="number" min="1" value={cfg.audit.retentionDays} onChange={(event) => setCfg({ ...cfg, audit: { ...cfg.audit, retentionDays: Number(event.target.value) } })} /></label><label>单文件上限 (MB)<input type="number" min="1" value={cfg.audit.maxFileSizeMB} onChange={(event) => setCfg({ ...cfg, audit: { ...cfg.audit, maxFileSizeMB: Number(event.target.value) } })} /></label></section>
+    <section className="retention"><h3>本地数据保留策略</h3><label>审计保留天数<input type="number" min="1" value={cfg.audit.retentionDays} onChange={(event) => setCfg({ ...cfg, audit: { ...cfg.audit, retentionDays: Number(event.target.value) } })} /></label><label>审计单文件上限 (MB)<input type="number" min="1" value={cfg.audit.maxFileSizeMB} onChange={(event) => setCfg({ ...cfg, audit: { ...cfg.audit, maxFileSizeMB: Number(event.target.value) } })} /></label><label>配置备份保留天数<input type="number" min="1" value={cfg.audit.configBackupRetentionDays} onChange={(event) => setCfg({ ...cfg, audit: { ...cfg.audit, configBackupRetentionDays: Number(event.target.value) } })} /></label></section>
     {backups.length > 0 && <section className="backups"><h3>配置备份</h3>{backups.slice(0, 10).map((backup) => <div key={backup.id}><code>{backup.id}</code><span>{new Date(backup.createdAt).toLocaleString()} · {(backup.size / 1024).toFixed(1)} KB</span><button className="button ghost" onClick={() => { setError(''); setRestoreTarget(backup); }}>回滚</button></div>)}</section>}
     {restoreTarget && <ConfirmDialog title="回滚配置" description={<><b>将当前配置替换为备份 {restoreTarget.id}。</b><p>系统会重新验证 Kafka 连接并热加载；当前配置会先自动备份。</p></>} confirmLabel="确认回滚配置" pending={restoring} error={error} onClose={() => { setRestoreTarget(undefined); setError(''); }} onConfirm={restore} />}
   </>;

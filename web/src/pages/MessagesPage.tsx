@@ -9,7 +9,7 @@ import { activeFilterCount, filterQueryParams, JSONFilterCondition, JSONOperator
 type MessageQueryResult = { items: MessageRecord[]; scanned: number; matched: number; skippedInvalidJson: number; resultLimited: boolean; scanLimited: boolean };
 type QueryMeta = Omit<MessageQueryResult, 'items'> & { matched: number; filters: number };
 
-export function MessagesPage({ clusterId, fixedTopic, embedded = false }: { clusterId: string; fixedTopic?: string; embedded?: boolean }) {
+export function MessagesPage({ clusterId, fixedTopic, embedded = false, readOnly = false }: { clusterId: string; fixedTopic?: string; embedded?: boolean; readOnly?: boolean }) {
   const [items, setItems] = useState<MessageRecord[]>([]);
   const [selected, setSelected] = useState<MessageRecord>();
   const [error, setError] = useState('');
@@ -50,6 +50,7 @@ export function MessagesPage({ clusterId, fixedTopic, embedded = false }: { clus
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clusterId, fixedTopic]);
   useEffect(() => () => stream.current?.close(), []);
+  useEffect(() => { if (readOnly) setProducer(false); }, [readOnly]);
   useEffect(() => {
     const next = replaceMessageFilterParams(new URLSearchParams(window.location.search), filters);
     const query = next.toString();
@@ -70,8 +71,8 @@ export function MessagesPage({ clusterId, fixedTopic, embedded = false }: { clus
   }
 
   return <div className={embedded ? 'messages-embedded' : ''}>
-    {!embedded && <PageHeader code="MESSAGES" title="消息检索" description="跨 Topic 查询 Kafka 原始消息；也可以从 Topic 工作区直接进入。" actions={<button className="button primary" onClick={() => setProducer(!producer)}><Icon name="plus" />生产消息</button>} />}
-    {embedded && <div className="panel-heading"><div><h2>消息</h2><p>当前 Topic 已自动绑定，并载入最近消息</p></div><button className="button primary" onClick={() => setProducer(!producer)}><Icon name="plus" />生产消息</button></div>}
+    {!embedded && <PageHeader code="MESSAGES" title="消息检索" description="跨 Topic 查询 Kafka 原始消息；也可以从 Topic 工作区直接进入。" actions={<button className="button primary" disabled={readOnly} title={readOnly ? '当前集群为只读模式' : undefined} onClick={() => setProducer(!producer)}><Icon name="plus" />{readOnly ? '只读集群' : '生产消息'}</button>} />}
+    {embedded && <div className="panel-heading"><div><h2>消息</h2><p>当前 Topic 已自动绑定，并载入最近消息</p></div><button className="button primary" disabled={readOnly} title={readOnly ? '当前集群为只读模式' : undefined} onClick={() => setProducer(!producer)}><Icon name="plus" />{readOnly ? '只读集群' : '生产消息'}</button></div>}
     <form className="message-query" onSubmit={(event) => { event.preventDefault(); void queryMessages(); }}>
       {!fixedTopic && <label className="wide">Topic<input required value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="输入 Topic 名称" /></label>}
       <label>Partition<input type="number" min="-1" value={partition} onChange={(event) => setPartition(Number(event.target.value))} /></label>

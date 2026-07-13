@@ -64,7 +64,7 @@ clusters:
 	if cfg.Server.ListenAddress != ":8080" {
 		t.Fatalf("listen address = %q, want :8080", cfg.Server.ListenAddress)
 	}
-	if cfg.Audit.RetentionDays != 30 || cfg.Audit.MaxFileSizeMB != 50 {
+	if cfg.Audit.RetentionDays != 30 || cfg.Audit.MaxFileSizeMB != 50 || cfg.Audit.ConfigBackupRetentionDays != 30 {
 		t.Fatalf("unexpected audit defaults: %+v", cfg.Audit)
 	}
 }
@@ -80,6 +80,7 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 		{"unsupported protocol", validPrefixWithProtocol("MAGIC") + validAudit(), "security protocol"},
 		{"sasl missing mechanism", validPrefixWithProtocol("SASL_PLAINTEXT") + validAudit(), "mechanism"},
 		{"invalid retention", validPrefix() + "audit:\n  retentionDays: 0\n  maxFileSizeMB: 50\n", "retentionDays"},
+		{"invalid backup retention", validPrefix() + "audit:\n  retentionDays: 30\n  maxFileSizeMB: 50\n  configBackupRetentionDays: 0\n", "configBackupRetentionDays"},
 		{"unknown yaml field", validPrefix() + validAudit() + "unknown: true\n", "field unknown"},
 	}
 
@@ -123,7 +124,7 @@ func TestMarshalIncludesConfigurationCommentsAndReloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	for _, comment := range []string{"Web 服务与登录配置", "Kafka 集群列表", "审计日志", "首页监控采样"} {
+	for _, comment := range []string{"Web 服务与登录配置", "Kafka 集群列表", "本地数据保留", "首页监控采样"} {
 		if !strings.Contains(text, "# "+comment) {
 			t.Fatalf("missing comment %q in:\n%s", comment, text)
 		}

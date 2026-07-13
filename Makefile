@@ -1,6 +1,6 @@
 GO ?= go
 
-.PHONY: dev-backend dev-frontend test build
+.PHONY: dev-backend dev-frontend test test-e2e build
 
 dev-backend:
 	$(GO) run . --config $${CONFIG:-./config.yaml}
@@ -12,6 +12,9 @@ test:
 	$(GO) test ./...
 	$(GO) vet ./...
 	pnpm --dir web test --run
+
+test-e2e:
+	pnpm --dir web test:e2e
 
 build:
 	pnpm --dir web build

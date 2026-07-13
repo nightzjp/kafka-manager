@@ -10,8 +10,8 @@
 - Consumer Group：成员、分区 Lag、删除和 Offset 重置。
 - 配置：Web 编辑、连接验证、YAML 原子写回、备份、Web 回滚和热加载。
 - 界面：日间、夜间、跟随系统三种主题，主题选择自动保存在浏览器；桌面与移动端均可使用。
-- 安全：单用户登录、签名 Cookie、登录限速和危险操作审计。
-- 审计：按日期目录保存，按文件大小轮转并自动清理。
+- 安全：单用户登录、签名 Cookie、登录限速、危险操作审计和集群级只读保护。
+- 本地数据：审计按日期和大小轮转，配置备份按保留期自动清理；Compose 限制容器日志大小。
 
 不包含 Kafka Connect、Schema Registry、ksqlDB、Prometheus、数据库或 JVM 指标。
 
@@ -56,6 +56,7 @@ Vite 会把 `/api` 代理至 `localhost:8080`。测试与构建：
 
 ```bash
 make test
+make test-e2e
 make build
 ```
 

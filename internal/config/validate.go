@@ -31,6 +31,9 @@ func (c Config) Validate() error {
 	if c.Audit.MaxFileSizeMB < 1 {
 		return fmt.Errorf("audit maxFileSizeMB must be greater than zero")
 	}
+	if c.Audit.ConfigBackupRetentionDays < 1 {
+		return fmt.Errorf("audit configBackupRetentionDays must be greater than zero")
+	}
 	return nil
 }
 

@@ -82,6 +82,8 @@ docker compose ps
 docker compose down
 ```
 
+Compose 将容器标准输出限制为每个文件 10 MB、最多 3 个文件，避免 Docker 日志长期占满磁盘。审计日志和配置备份由 `config.yaml` 中的保留天数自动清理。
+
 修改宿主机 `config.yaml` 后，运行中的应用会自动热加载。通过 Web 保存配置也会同步更新宿主机文件。
 
 ## 反向代理

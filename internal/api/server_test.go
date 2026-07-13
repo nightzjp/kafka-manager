@@ -77,6 +77,39 @@ func TestConfigAPIHidesKafkaPassword(t *testing.T) {
 	}
 }
 
+func TestReadOnlyClusterRejectsEveryKafkaMutation(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.Clusters[0].ReadOnly = true
+	server := NewServer(cfg, nil, cluster.NewManager(cluster.KafkaFactory{}), []byte("a-secret-key-with-at-least-32-bytes"))
+	login := httptest.NewRecorder()
+	server.ServeHTTP(login, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin","password":"secret"}`)))
+	cookie := login.Result().Cookies()[0]
+	tests := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPost, "/api/v1/clusters/dev/topics", `{"name":"orders","partitions":1,"replicationFactor":1}`},
+		{http.MethodDelete, "/api/v1/clusters/dev/topics/orders", ""},
+		{http.MethodPost, "/api/v1/clusters/dev/topics/orders/partitions", `{"count":1}`},
+		{http.MethodPut, "/api/v1/clusters/dev/topics/orders/configs", `{"configs":{"retention.ms":"1000"}}`},
+		{http.MethodPost, "/api/v1/clusters/dev/messages", `{"topic":"orders","partition":-1,"value":"{}"}`},
+		{http.MethodPost, "/api/v1/clusters/dev/consumer-groups/orders/reset", `{"mode":"latest"}`},
+		{http.MethodDelete, "/api/v1/clusters/dev/consumer-groups/orders", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			request := httptest.NewRequest(tt.method, tt.path, bytes.NewBufferString(tt.body))
+			request.AddCookie(cookie)
+			response := httptest.NewRecorder()
+			server.ServeHTTP(response, request)
+			if response.Code != http.StatusForbidden || !bytes.Contains(response.Body.Bytes(), []byte(`"code":"cluster_read_only"`)) {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 func testConfig(t *testing.T) config.Config {
 	t.Helper()
 	return config.Config{Server: config.ServerConfig{Username: "admin", Password: "secret", SessionHours: 12}, Clusters: []config.ClusterConfig{{ID: "dev", Name: "开发环境", Brokers: []string{"localhost:9092"}}}}

@@ -9,12 +9,13 @@ server:
   password: "change-this-login-password"
   sessionHours: 12
 
-# Kafka 集群列表，可继续追加。
+# Kafka 集群列表，可继续追加；readOnly 为 true 时禁止所有 Kafka 写操作。
 # protocol: PLAINTEXT / SSL / SASL_PLAINTEXT / SASL_SSL
 # SASL mechanism: PLAIN / SCRAM-SHA-256 / SCRAM-SHA-512
 clusters:
   - id: test
     name: 测试环境
+    readOnly: false
     brokers:
       - kafka-test.example.local:9092
     security:
@@ -25,17 +26,19 @@ clusters:
 
   - id: internal
     name: 内网环境
+    readOnly: true
     brokers:
       - kafka-internal.example.local:9092
     security:
       protocol: PLAINTEXT
 
-# 审计日志按日期建目录，并按 maxFileSizeMB 轮转。
+# 审计日志按日期和大小轮转；配置备份按 configBackupRetentionDays 清理。
 audit:
   enabled: true
   directory: ./data/audit
   retentionDays: 30
   maxFileSizeMB: 50
+  configBackupRetentionDays: 30
 
 # 首页监控采样间隔（秒）和内存中保留的历史点数。
 dashboard:

@@ -30,6 +30,12 @@ pnpm --dir web test --run
 pnpm --dir web build
 ```
 
+浏览器核心流程使用 Playwright 和本机 Chrome，API 响应在测试中模拟，不要求连接 Kafka：
+
+```bash
+make test-e2e
+```
+
 业务改动遵循测试先行：先增加失败测试，确认失败原因，再实现最小代码并运行全部回归测试。
 
 ## 目录

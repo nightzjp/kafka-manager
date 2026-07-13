@@ -145,3 +145,28 @@ func TestStoreReturnsEmptyBackupListWhenDirectoryIsMissing(t *testing.T) {
 		t.Fatalf("ListBackups() = %#v, %v", items, err)
 	}
 }
+
+func TestStoreCleanupBackupsRemovesOnlyExpiredDateDirectories(t *testing.T) {
+	dir := t.TempDir()
+	backupDir := filepath.Join(dir, "backups")
+	for _, name := range []string{"2026-06-12", "2026-06-13", "notes"} {
+		if err := os.MkdirAll(filepath.Join(backupDir, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(backupDir, name, "config.yaml"), []byte("test"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store := NewStore(filepath.Join(dir, "config.yaml"), backupDir)
+	if err := store.CleanupBackups(30, time.Date(2026, 7, 13, 12, 0, 0, 0, time.Local)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(backupDir, "2026-06-12")); !os.IsNotExist(err) {
+		t.Fatalf("expired backup directory still exists: %v", err)
+	}
+	for _, name := range []string{"2026-06-13", "notes"} {
+		if _, err := os.Stat(filepath.Join(backupDir, name)); err != nil {
+			t.Fatalf("directory %s should be preserved: %v", name, err)
+		}
+	}
+}

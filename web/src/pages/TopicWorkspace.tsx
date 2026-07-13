@@ -8,13 +8,14 @@ import { MessagesPage } from './MessagesPage';
 
 export type TopicTab = 'overview' | 'messages' | 'partitions' | 'config';
 
-export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack, onRefresh }: {
+export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack, onRefresh, readOnly }: {
   clusterId: string;
   topic: Topic;
   tab: TopicTab;
   setTab: (tab: TopicTab) => void;
   onBack: () => void;
   onRefresh: () => Promise<void>;
+  readOnly: boolean;
 }) {
   const [error, setError] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -51,18 +52,19 @@ export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack, onRefres
           <span>{topic.PartitionCount} 分区</span><span>复制因子 {topic.ReplicationFactor}</span>
         </div>
       </div>
-      <div className="workspace-actions"><button className="button ghost" disabled={refreshing} onClick={() => void refresh()}><Icon name="refresh" />{refreshing ? '刷新中…' : '刷新'}</button><button className="button danger" onClick={() => { setError(''); setConfirmingDelete(true); }}><Icon name="trash" />删除 Topic</button></div>
+      <div className="workspace-actions"><button className="button ghost" disabled={refreshing} onClick={() => void refresh()}><Icon name="refresh" />{refreshing ? '刷新中…' : '刷新'}</button><button className="button danger" disabled={readOnly} title={readOnly ? '当前集群为只读模式' : undefined} onClick={() => { setError(''); setConfirmingDelete(true); }}><Icon name="trash" />{readOnly ? '只读集群' : '删除 Topic'}</button></div>
     </header>
     <Tabs value={tab} onChange={setTab} items={[
       { id: 'overview', label: '概览' }, { id: 'messages', label: '消息' },
       { id: 'partitions', label: '分区', count: topic.PartitionCount }, { id: 'config', label: '配置' },
     ]} />
+    {readOnly && <div className="readonly-notice"><Icon name="warning" /><span><b>当前集群为只读模式</b>，可以查看 Topic、消息、分区和配置，但不能执行 Kafka 写操作。</span></div>}
     {error && <ErrorNotice message={error} />}
     <div className="tab-panel" role="tabpanel" id={`workspace-panel-${tab}`} aria-labelledby={`workspace-tab-${tab}`}>
       {tab === 'overview' && <Overview topic={topic} setTab={setTab} />}
-      {tab === 'messages' && <MessagesPage clusterId={clusterId} fixedTopic={topic.Name} embedded />}
-      {tab === 'partitions' && <Partitions clusterId={clusterId} topic={topic} onRefresh={onRefresh} />}
-      {tab === 'config' && <Configs clusterId={clusterId} topic={topic.Name} />}
+      {tab === 'messages' && <MessagesPage clusterId={clusterId} fixedTopic={topic.Name} embedded readOnly={readOnly} />}
+      {tab === 'partitions' && <Partitions clusterId={clusterId} topic={topic} onRefresh={onRefresh} readOnly={readOnly} />}
+      {tab === 'config' && <Configs clusterId={clusterId} topic={topic.Name} readOnly={readOnly} />}
     </div>
     {confirmingDelete && <ConfirmDialog title="删除 Topic" description={<><b>此操作不可撤销。</b><p>Topic 的全部消息、分区和配置都会被永久删除。</p></>} confirmLabel="永久删除 Topic" confirmationText={topic.Name} pending={deleting} error={error} onClose={() => { setConfirmingDelete(false); setError(''); }} onConfirm={remove} />}
   </div>;
@@ -86,7 +88,7 @@ function Summary({ label, value, tone }: { label: string; value: string | number
   return <article className={`summary-card ${tone || ''}`}><span>{label}</span><strong>{value}</strong></article>;
 }
 
-function Partitions({ clusterId, topic, onRefresh }: { clusterId: string; topic: Topic; onRefresh: () => Promise<void> }) {
+function Partitions({ clusterId, topic, onRefresh, readOnly }: { clusterId: string; topic: Topic; onRefresh: () => Promise<void>; readOnly: boolean }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [adding, setAdding] = useState(false);
@@ -108,7 +110,7 @@ function Partitions({ clusterId, topic, onRefresh }: { clusterId: string; topic:
     }
   }
   return <section className="panel">
-    <div className="panel-heading"><div><h2>分区列表</h2><p>扩分区不可撤销，请确认生产者分区策略</p></div><button className="button primary" onClick={() => setAdding(!adding)}><Icon name="plus" />增加分区</button></div>
+    <div className="panel-heading"><div><h2>分区列表</h2><p>扩分区不可撤销，请确认生产者分区策略</p></div><button className="button primary" disabled={readOnly} title={readOnly ? '当前集群为只读模式' : undefined} onClick={() => setAdding(!adding)}><Icon name="plus" />{readOnly ? '只读集群' : '增加分区'}</button></div>
     {adding && <form className="inline-form" onSubmit={add}><label>新增数量<input name="count" type="number" min="1" defaultValue="1" /></label><button className="button primary">确认扩容</button></form>}
     {notice && <div className="success-notice" role="status"><Icon name="check" />{notice}</div>}
     {error && <ErrorNotice message={error} />}
@@ -118,7 +120,7 @@ function Partitions({ clusterId, topic, onRefresh }: { clusterId: string; topic:
   </section>;
 }
 
-function Configs({ clusterId, topic }: { clusterId: string; topic: string }) {
+function Configs({ clusterId, topic, readOnly }: { clusterId: string; topic: string; readOnly: boolean }) {
   const [items, setItems] = useState<TopicConfig[]>([]);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
@@ -135,7 +137,7 @@ function Configs({ clusterId, topic }: { clusterId: string; topic: string }) {
   const shown = items.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
   return <section className="panel">
     <div className="panel-heading"><div><h2>Topic 配置</h2><p>留空配置值会恢复 Broker 默认值</p></div><label className="search-field compact"><Icon name="search" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="筛选配置项" /></label></div>
-    <form className="config-form" onSubmit={alter}><label>配置项<input name="name" required placeholder="retention.ms" /></label><label>配置值<input name="value" placeholder="留空恢复默认" /></label><button className="button primary">应用配置</button></form>
+    <form className="config-form" onSubmit={alter}><label>配置项<input name="name" required disabled={readOnly} placeholder="retention.ms" /></label><label>配置值<input name="value" disabled={readOnly} placeholder="留空恢复默认" /></label><button className="button primary" disabled={readOnly} title={readOnly ? '当前集群为只读模式' : undefined}>{readOnly ? '只读集群' : '应用配置'}</button></form>
     {error && <ErrorNotice message={error} />}
     <div className="config-list">{shown.map((item) => <div key={item.name}><code>{item.name}</code><span>{item.sensitive ? '••••••' : item.value ?? '默认'}</span><small>{item.source}</small></div>)}</div>
   </section>;

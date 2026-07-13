@@ -49,6 +49,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("decrypt configuration: %v", err)
 	}
+	cleanupBackups := func() {
+		current, loadErr := store.Load()
+		if loadErr != nil {
+			log.Printf("config backup cleanup skipped: %v", loadErr)
+			return
+		}
+		if cleanupErr := store.CleanupBackups(current.Audit.ConfigBackupRetentionDays, time.Now()); cleanupErr != nil {
+			log.Printf("config backup cleanup: %v", cleanupErr)
+		}
+	}
+	cleanupBackups()
 	manager := cluster.NewManager(cluster.KafkaFactory{})
 	defer manager.Close()
 	connect := func(current config.Config) {
@@ -104,6 +115,18 @@ func main() {
 				if _, err := watcher.Poll(); err != nil {
 					log.Printf("configuration reload rejected: %v", err)
 				}
+			}
+		}
+	}()
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				cleanupBackups()
 			}
 		}
 	}()

@@ -140,6 +140,34 @@ func (s *Store) ListBackups() ([]Backup, error) {
 	sort.Slice(backups, func(i, j int) bool { return backups[i].CreatedAt.After(backups[j].CreatedAt) })
 	return backups, nil
 }
+
+func (s *Store) CleanupBackups(retentionDays int, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entries, err := os.ReadDir(s.backupDir)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	cutoffDate := now.AddDate(0, 0, -retentionDays)
+	cutoff := time.Date(cutoffDate.Year(), cutoffDate.Month(), cutoffDate.Day(), 0, 0, 0, 0, now.Location())
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		date, parseErr := time.ParseInLocation("2006-01-02", entry.Name(), now.Location())
+		if parseErr != nil || !date.Before(cutoff) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(s.backupDir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) Restore(id string) (Config, error) {
 	data, cfg, err := s.LoadBackup(id)
 	if err != nil {

@@ -236,6 +236,11 @@
 .sidebar.collapsed .sidebar-foot .health-dot { margin:0; }
 .sidebar.collapsed .sidebar-toggle { width:52px; justify-content:center; gap:0; padding:0; }
 .workspace-actions { display:flex; align-items:center; gap:8px; }
+.readonly-badge { padding:4px 7px; border:1px solid color-mix(in srgb,var(--warning) 35%,var(--border)); border-radius:999px; background:var(--warning-soft); color:var(--warning)!important; font:600 9px "Fira Code",monospace!important; }
+.readonly-notice { margin:-8px 0 16px; padding:10px 12px; display:flex; align-items:center; gap:9px; border:1px solid color-mix(in srgb,var(--warning) 28%,var(--border)); border-radius:8px; background:var(--warning-soft); color:var(--warning); font-size:11px; }
+.readonly-notice span { color:var(--muted); }
+.readonly-notice b { margin-right:5px; color:var(--warning); }
+.config-readonly { min-height:38px; padding:9px 10px; border:1px solid var(--border); border-radius:7px; background:var(--surface-2); color:var(--text)!important; }
 
 @media(max-width:820px) {
   .sidebar.collapsed { width:236px; }

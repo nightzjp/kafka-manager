@@ -8,7 +8,7 @@ import { ConsumerSort, filterPartitions, sortConsumerGroups, summarizeConsumerGr
 
 type HealthFilter = 'all' | 'lagging' | 'healthy';
 
-export function ConsumersPage({ clusterId }: { clusterId: string }) {
+export function ConsumersPage({ clusterId, readOnly }: { clusterId: string; readOnly: boolean }) {
   const [items, setItems] = useState<ConsumerGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -71,7 +71,7 @@ export function ConsumersPage({ clusterId }: { clusterId: string }) {
         })}</tbody>
       </table>
     </div>}
-    {selected && <GroupDrawer group={selected} clusterId={clusterId} close={() => setSelected(undefined)} saved={() => { setSelected(undefined); load(); }} />}
+    {selected && <GroupDrawer group={selected} clusterId={clusterId} readOnly={readOnly} close={() => setSelected(undefined)} saved={() => { setSelected(undefined); load(); }} />}
   </>;
 }
 
@@ -79,7 +79,7 @@ function DiagnosticMetric({ label, value, detail, tone = 'neutral' }: { label: s
   return <article className={`diagnostic-metric ${tone}`}><div><span>{label}</span><small>{detail}</small></div><strong>{value.toLocaleString()}</strong></article>;
 }
 
-function GroupDrawer({ group, clusterId, close, saved }: { group: ConsumerGroup; clusterId: string; close: () => void; saved: () => void }) {
+function GroupDrawer({ group, clusterId, readOnly, close, saved }: { group: ConsumerGroup; clusterId: string; readOnly: boolean; close: () => void; saved: () => void }) {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [lagOnly, setLagOnly] = useState(false);
@@ -127,7 +127,7 @@ function GroupDrawer({ group, clusterId, close, saved }: { group: ConsumerGroup;
       </section>
       <section className="danger-zone">
         <div><span className="section-code">DANGER ZONE</span><h3>重置 Consumer Offset</h3><p>该操作会改变消费位置，可能导致消息重复消费或跳过。执行前请确认消费者已经停止。</p></div>
-        <form className={mode === 'absolute' ? '' : 'compact'} onSubmit={reset}><label>目标位置<select value={mode} onChange={(event) => setMode(event.target.value)}><option value="earliest">重置到最早</option><option value="latest">重置到最新</option><option value="absolute">指定 Offset</option></select></label>{mode === 'absolute' && <label>Offset<input name="offset" type="number" min="0" required placeholder="输入绝对 Offset" /></label>}<button className="button danger" disabled={resetting}><Icon name="warning" />{resetting ? '正在重置…' : '重置 Offset'}</button></form>
+        <form className={mode === 'absolute' ? '' : 'compact'} onSubmit={reset}><label>目标位置<select value={mode} disabled={readOnly} onChange={(event) => setMode(event.target.value)}><option value="earliest">重置到最早</option><option value="latest">重置到最新</option><option value="absolute">指定 Offset</option></select></label>{mode === 'absolute' && <label>Offset<input name="offset" type="number" min="0" required disabled={readOnly} placeholder="输入绝对 Offset" /></label>}<button className="button danger" disabled={resetting || readOnly} title={readOnly ? '当前集群为只读模式' : undefined}><Icon name="warning" />{readOnly ? '只读集群' : resetting ? '正在重置…' : '重置 Offset'}</button></form>
         {error && <ErrorNotice message={error} />}
       </section>
     </div>
