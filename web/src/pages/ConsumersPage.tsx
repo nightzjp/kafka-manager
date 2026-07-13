@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Drawer, Empty, ErrorNotice, Loading, PageHeader, Status } from '../components/Common';
+import { ConfirmDialog, Drawer, Empty, ErrorNotice, Loading, PageHeader, Status } from '../components/Common';
+import { useFeedback } from '../components/Feedback';
 import { Icon } from '../components/Icon';
 import { api } from '../lib/api';
 import { ConsumerGroup, PartitionLag } from '../lib/types';
@@ -84,22 +85,34 @@ function GroupDrawer({ group, clusterId, close, saved }: { group: ConsumerGroup;
   const [lagOnly, setLagOnly] = useState(false);
   const [mode, setMode] = useState('latest');
   const [resetting, setResetting] = useState(false);
+  const [resetRequest, setResetRequest] = useState<{ mode: string; offset: number }>();
+  const feedback = useFeedback();
   const partitions = useMemo(() => filterPartitions(group.Partitions || [], search, lagOnly), [group.Partitions, lagOnly, search]);
   const laggingCount = group.Partitions.filter((partition) => partition.lag > 0).length;
 
   async function reset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (prompt(`输入消费组名称确认重置：${group.Name}`) !== group.Name) return;
     const data = new FormData(event.currentTarget);
+    setError('');
+    setResetRequest({ mode, offset: Number(data.get('offset') || 0) });
+  }
+
+  async function confirmReset() {
+    if (!resetRequest) return;
     setResetting(true); setError('');
     try {
-      await api.post(`/api/v1/clusters/${clusterId}/consumer-groups/${encodeURIComponent(group.Name)}/reset`, { mode, offset: Number(data.get('offset') || 0) });
+      await api.post(`/api/v1/clusters/${clusterId}/consumer-groups/${encodeURIComponent(group.Name)}/reset`, resetRequest);
+      feedback.success('Consumer Offset 已重置', `${group.Name} · ${resetModeLabel(resetRequest.mode, resetRequest.offset)}`);
+      setResetRequest(undefined);
       saved();
-    } catch (reason) { setError(reason instanceof Error ? reason.message : '重置失败'); }
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : '重置失败';
+      setError(message); feedback.error('重置 Offset 失败', message);
+    }
     finally { setResetting(false); }
   }
 
-  return <Drawer title={group.Name} subtitle={`${clusterId} · ${group.Protocol || '未声明协议'}`} onClose={close}>
+  return <><Drawer title={group.Name} subtitle={`${clusterId} · ${group.Protocol || '未声明协议'}`} onClose={close}>
     <div className="consumer-drawer-body">
       <section className="drawer-metrics">
         <DrawerMetric label="状态" value={group.State || 'Unknown'} tone={groupTone(group)} />
@@ -118,7 +131,7 @@ function GroupDrawer({ group, clusterId, close, saved }: { group: ConsumerGroup;
         {error && <ErrorNotice message={error} />}
       </section>
     </div>
-  </Drawer>;
+  </Drawer>{resetRequest && <ConfirmDialog title="重置 Consumer Offset" description={<><b>消费位置将被修改为“{resetModeLabel(resetRequest.mode, resetRequest.offset)}”。</b><p>可能导致消息重复消费或被跳过。请先确认该消费组的消费者已经停止。</p></>} confirmLabel="确认重置 Offset" confirmationText={group.Name} pending={resetting} error={error} onClose={() => { setResetRequest(undefined); setError(''); }} onConfirm={confirmReset} />}</>;
 }
 
 function DrawerMetric({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'neutral' | 'good' | 'warn' | 'bad' }) {
@@ -138,3 +151,9 @@ function groupTone(group: ConsumerGroup): 'good' | 'warn' | 'bad' | 'neutral' {
 }
 
 function lagLabel(lag: number) { if (!lag) return '无积压'; if (lag >= 10000) return '严重'; if (lag >= 1000) return '较高'; return '待关注'; }
+
+function resetModeLabel(mode: string, offset: number) {
+  if (mode === 'earliest') return '最早位置';
+  if (mode === 'absolute') return `Offset ${offset}`;
+  return '最新位置';
+}

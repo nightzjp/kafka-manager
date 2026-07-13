@@ -1,5 +1,6 @@
-import { KeyboardEvent, ReactNode, useEffect, useRef } from 'react';
+import { FormEvent, KeyboardEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { confirmationMatches } from './confirmation-model';
 
 export function PageHeader({ code, title, description, actions }: { code: string; title: string; description: string; actions?: ReactNode }) {
   return <header className="page-header"><div><span className="section-code">{code}</span><h1>{title}</h1><p>{description}</p></div>{actions && <div className="page-actions">{actions}</div>}</header>;
@@ -37,7 +38,7 @@ export function Tabs<T extends string>({ items, value, onChange, id = 'workspace
   >{item.label}{item.count !== undefined && <span>{item.count}</span>}</button>)}</div>;
 }
 
-export function Dialog({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+export function Dialog({ title, children, onClose, closeDisabled = false }: { title: string; children: ReactNode; onClose: () => void; closeDisabled?: boolean }) {
   const dialog = useRef<HTMLElement>(null);
   useEffect(() => {
     const oldOverflow = document.body.style.overflow;
@@ -46,7 +47,7 @@ export function Dialog({ title, children, onClose }: { title: string; children: 
     const focusable = () => Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || []);
     focusable()[0]?.focus();
     const key = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') { onClose(); return; }
+      if (event.key === 'Escape') { if (!closeDisabled) onClose(); return; }
       if (event.key !== 'Tab') return;
       const items = focusable();
       if (!items.length) return;
@@ -56,8 +57,36 @@ export function Dialog({ title, children, onClose }: { title: string; children: 
     };
     addEventListener('keydown', key);
     return () => { document.body.style.overflow = oldOverflow; removeEventListener('keydown', key); previous?.focus(); };
-  }, [onClose]);
-  return <div className="scrim" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section ref={dialog} className="dialog" role="dialog" aria-modal="true" aria-label={title}><header><span>{title}</span><button className="icon-button" aria-label="关闭" onClick={onClose}><Icon name="close" /></button></header>{children}</section></div>;
+  }, [closeDisabled, onClose]);
+  return <div className="scrim" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !closeDisabled && onClose()}><section ref={dialog} className="dialog" role="dialog" aria-modal="true" aria-label={title}><header><span>{title}</span><button className="icon-button" aria-label="关闭" disabled={closeDisabled} onClick={onClose}><Icon name="close" /></button></header>{children}</section></div>;
+}
+
+export function ConfirmDialog({ title, description, confirmLabel, confirmationText, pending = false, error, onConfirm, onClose }: {
+  title: string;
+  description: ReactNode;
+  confirmLabel: string;
+  confirmationText?: string;
+  pending?: boolean;
+  error?: string;
+  onConfirm: () => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState('');
+  const enabled = confirmationMatches(value, confirmationText) && !pending;
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (enabled) void onConfirm();
+  }
+  return <Dialog title={title} closeDisabled={pending} onClose={onClose}>
+    <form className="dialog-body confirm-dialog" onSubmit={submit}>
+      <div className="confirm-warning"><Icon name="warning" size={22} /><div>{description}</div></div>
+      {confirmationText !== undefined && <label>输入 <code>{confirmationText}</code> 继续
+        <input value={value} onChange={(event) => setValue(event.target.value)} autoComplete="off" autoFocus placeholder={confirmationText} />
+      </label>}
+      {error && <ErrorNotice message={error} />}
+      <div className="form-actions"><button type="button" className="button ghost" disabled={pending} onClick={onClose}>取消</button><button className="button danger solid" disabled={!enabled}>{pending ? '正在执行…' : confirmLabel}</button></div>
+    </form>
+  </Dialog>;
 }
 
 export function Drawer({ title, subtitle, children, onClose }: { title: string; subtitle?: string; children: ReactNode; onClose: () => void }) {

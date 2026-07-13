@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { ErrorNotice, Status, Tabs } from '../components/Common';
+import { ConfirmDialog, ErrorNotice, Status, Tabs } from '../components/Common';
+import { useFeedback } from '../components/Feedback';
 import { Icon } from '../components/Icon';
 import { api } from '../lib/api';
 import { Topic, TopicConfig } from '../lib/types';
@@ -15,14 +16,20 @@ export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack }: {
   onBack: () => void;
 }) {
   const [error, setError] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const feedback = useFeedback();
   async function remove() {
-    if (prompt(`输入 Topic 名称确认删除：${topic.Name}`) !== topic.Name) return;
+    setDeleting(true); setError('');
     try {
       await api.delete(`/api/v1/clusters/${clusterId}/topics/${encodeURIComponent(topic.Name)}`);
+      feedback.success('Topic 已删除', topic.Name);
+      setConfirmingDelete(false);
       onBack();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '删除 Topic 失败');
-    }
+      const message = reason instanceof Error ? reason.message : '删除 Topic 失败';
+      setError(message); feedback.error('删除 Topic 失败', message);
+    } finally { setDeleting(false); }
   }
 
   return <div className="topic-workspace">
@@ -36,7 +43,7 @@ export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack }: {
           <span>{topic.PartitionCount} 分区</span><span>复制因子 {topic.ReplicationFactor}</span>
         </div>
       </div>
-      <button className="button danger" onClick={remove}><Icon name="trash" />删除 Topic</button>
+      <button className="button danger" onClick={() => { setError(''); setConfirmingDelete(true); }}><Icon name="trash" />删除 Topic</button>
     </header>
     <Tabs value={tab} onChange={setTab} items={[
       { id: 'overview', label: '概览' }, { id: 'messages', label: '消息' },
@@ -49,6 +56,7 @@ export function TopicWorkspace({ clusterId, topic, tab, setTab, onBack }: {
       {tab === 'partitions' && <Partitions clusterId={clusterId} topic={topic} />}
       {tab === 'config' && <Configs clusterId={clusterId} topic={topic.Name} />}
     </div>
+    {confirmingDelete && <ConfirmDialog title="删除 Topic" description={<><b>此操作不可撤销。</b><p>Topic 的全部消息、分区和配置都会被永久删除。</p></>} confirmLabel="永久删除 Topic" confirmationText={topic.Name} pending={deleting} error={error} onClose={() => { setConfirmingDelete(false); setError(''); }} onConfirm={remove} />}
   </div>;
 }
 
@@ -74,6 +82,7 @@ function Partitions({ clusterId, topic }: { clusterId: string; topic: Topic }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [adding, setAdding] = useState(false);
+  const feedback = useFeedback();
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const count = Number(new FormData(event.currentTarget).get('count'));
@@ -81,6 +90,7 @@ function Partitions({ clusterId, topic }: { clusterId: string; topic: Topic }) {
       await api.post(`/api/v1/clusters/${clusterId}/topics/${encodeURIComponent(topic.Name)}/partitions`, { count });
       setAdding(false); setError('');
       setNotice(`已提交新增 ${count} 个分区；返回 Topic 列表后会刷新最新元数据。`);
+      feedback.success('分区扩容已提交', `${topic.Name} 新增 ${count} 个分区`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : '扩容失败'); }
   }
   return <section className="panel">
@@ -98,13 +108,14 @@ function Configs({ clusterId, topic }: { clusterId: string; topic: string }) {
   const [items, setItems] = useState<TopicConfig[]>([]);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const feedback = useFeedback();
   const load = () => { void api.get<{ items: TopicConfig[] }>(`/api/v1/clusters/${clusterId}/topics/${encodeURIComponent(topic)}/configs`).then((result) => { setItems(result.items); setError(''); }).catch((reason: Error) => setError(reason.message)); };
   useEffect(() => { load(); }, [clusterId, topic]);
   async function alter(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget); const name = String(data.get('name') || '').trim(); const raw = String(data.get('value') || '');
     if (!name) return;
-    try { await api.put(`/api/v1/clusters/${clusterId}/topics/${encodeURIComponent(topic)}/configs`, { configs: { [name]: raw === '' ? null : raw } }); event.currentTarget.reset(); load(); }
+    try { await api.put(`/api/v1/clusters/${clusterId}/topics/${encodeURIComponent(topic)}/configs`, { configs: { [name]: raw === '' ? null : raw } }); event.currentTarget.reset(); feedback.success('Topic 配置已更新', name); load(); }
     catch (reason) { setError(reason instanceof Error ? reason.message : '配置失败'); }
   }
   const shown = items.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
