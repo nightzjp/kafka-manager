@@ -66,7 +66,7 @@ make build
 - [部署与升级](docs/deployment.md)
 - [开发说明](docs/development.md)
 - [安全说明](docs/security.md)
-- [架构设计](docs/plans/2026-07-13-kafka-manager-design.md)
+- [架构说明](docs/architecture.md)
 
 ## License
 

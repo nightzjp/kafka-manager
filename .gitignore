@@ -1,12 +1,31 @@
 .worktrees/
 
+# 操作系统与编辑器生成文件
+.DS_Store
+.idea/
+.vscode/
+
+# 本地环境与凭据
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+
 build/
 data/
 config.yaml
 config.*.yaml
 !config.example.yaml
+*.log
+coverage/
 web/dist/
 web/node_modules/
+web/npm-debug.log*
+web/pnpm-debug.log*
 web/*.tsbuildinfo
 web/test-results/
 web/playwright-report/
