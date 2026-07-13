@@ -11,18 +11,22 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 )
 
-type KafkaClient struct { Client *kgo.Client }
+type KafkaClient struct{ Client *kgo.Client }
 
 func (c *KafkaClient) Ping(ctx context.Context) error { return c.Client.Ping(ctx) }
-func (c *KafkaClient) Close() { c.Client.Close() }
+func (c *KafkaClient) Close()                         { c.Client.Close() }
 
 type KafkaFactory struct{}
 
 func (KafkaFactory) Create(_ context.Context, cfg config.ClusterConfig) (Client, error) {
 	opts, err := Options(cfg)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	client, err := kgo.NewClient(opts...)
-	if err != nil { return nil, fmt.Errorf("create Kafka client: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("create Kafka client: %w", err)
+	}
 	return &KafkaClient{Client: client}, nil
 }
 
@@ -30,7 +34,9 @@ func Options(cfg config.ClusterConfig) ([]kgo.Opt, error) {
 	opts := []kgo.Opt{kgo.SeedBrokers(cfg.Brokers...), kgo.ClientID("kafka-manager")}
 	security := cfg.Security
 	protocol := security.Protocol
-	if protocol == "" { protocol = "PLAINTEXT" }
+	if protocol == "" {
+		protocol = "PLAINTEXT"
+	}
 	if protocol == "SSL" || protocol == "SASL_SSL" || security.TLS {
 		opts = append(opts, kgo.DialTLSConfig(&tls.Config{MinVersion: tls.VersionTLS12}))
 	}

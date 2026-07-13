@@ -99,6 +99,17 @@ func TestLoadRejectsMissingEnvironmentVariable(t *testing.T) {
 	}
 }
 
+func TestLoadPreservesDollarSignsOutsideBracedVariables(t *testing.T) {
+	input := strings.Replace(validPrefix(), "passwordHash: hash", "passwordHash: $argon2id$v=19$abc", 1) + validAudit()
+	cfg, err := Load(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Load() error=%v", err)
+	}
+	if cfg.Server.PasswordHash != "$argon2id$v=19$abc" {
+		t.Fatalf("hash=%q", cfg.Server.PasswordHash)
+	}
+}
+
 func validPrefix() string { return validPrefixWithBroker("localhost:9092") }
 
 func validPrefixWithBroker(broker string) string {

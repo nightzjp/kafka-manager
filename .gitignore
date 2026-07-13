@@ -8,3 +8,5 @@ config.*.yaml
 web/dist/
 web/node_modules/
 web/*.tsbuildinfo
+internal/webassets/dist-built/*
+!internal/webassets/dist-built/placeholder.txt

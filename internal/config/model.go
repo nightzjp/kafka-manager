@@ -1,43 +1,43 @@
 package config
 
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Clusters  []ClusterConfig `yaml:"clusters"`
-	Audit     AuditConfig     `yaml:"audit"`
-	Dashboard DashboardConfig `yaml:"dashboard"`
+	Server    ServerConfig    `yaml:"server" json:"server"`
+	Clusters  []ClusterConfig `yaml:"clusters" json:"clusters"`
+	Audit     AuditConfig     `yaml:"audit" json:"audit"`
+	Dashboard DashboardConfig `yaml:"dashboard" json:"dashboard"`
 }
 
 type ServerConfig struct {
-	ListenAddress string `yaml:"listenAddress"`
-	Username      string `yaml:"username"`
-	PasswordHash  string `yaml:"passwordHash"`
-	SessionHours  int    `yaml:"sessionHours"`
+	ListenAddress string `yaml:"listenAddress" json:"listenAddress"`
+	Username      string `yaml:"username" json:"username"`
+	PasswordHash  string `yaml:"passwordHash" json:"passwordHash"`
+	SessionHours  int    `yaml:"sessionHours" json:"sessionHours"`
 }
 
 type ClusterConfig struct {
-	ID       string         `yaml:"id"`
-	Name     string         `yaml:"name"`
-	Brokers  []string       `yaml:"brokers"`
-	Enabled  *bool          `yaml:"enabled,omitempty"`
-	Security SecurityConfig `yaml:"security"`
+	ID       string         `yaml:"id" json:"id"`
+	Name     string         `yaml:"name" json:"name"`
+	Brokers  []string       `yaml:"brokers" json:"brokers"`
+	Enabled  *bool          `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Security SecurityConfig `yaml:"security" json:"security"`
 }
 
 type SecurityConfig struct {
-	Protocol  string `yaml:"protocol"`
-	Mechanism string `yaml:"mechanism,omitempty"`
-	Username  string `yaml:"username,omitempty"`
-	Password  string `yaml:"password,omitempty"`
-	TLS       bool   `yaml:"tls,omitempty"`
+	Protocol  string `yaml:"protocol" json:"protocol"`
+	Mechanism string `yaml:"mechanism,omitempty" json:"mechanism,omitempty"`
+	Username  string `yaml:"username,omitempty" json:"username,omitempty"`
+	Password  string `yaml:"password,omitempty" json:"password,omitempty"`
+	TLS       bool   `yaml:"tls,omitempty" json:"tls,omitempty"`
 }
 
 type AuditConfig struct {
-	Enabled       *bool  `yaml:"enabled,omitempty"`
-	Directory     string `yaml:"directory"`
-	RetentionDays int    `yaml:"retentionDays"`
-	MaxFileSizeMB int    `yaml:"maxFileSizeMB"`
+	Enabled       *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Directory     string `yaml:"directory" json:"directory"`
+	RetentionDays int    `yaml:"retentionDays" json:"retentionDays"`
+	MaxFileSizeMB int    `yaml:"maxFileSizeMB" json:"maxFileSizeMB"`
 }
 
 type DashboardConfig struct {
-	SampleIntervalSeconds int `yaml:"sampleIntervalSeconds"`
-	HistoryPoints         int `yaml:"historyPoints"`
+	SampleIntervalSeconds int `yaml:"sampleIntervalSeconds" json:"sampleIntervalSeconds"`
+	HistoryPoints         int `yaml:"historyPoints" json:"historyPoints"`
 }

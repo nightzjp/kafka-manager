@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -15,7 +16,9 @@ func Load(reader io.Reader) (Config, error) {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
 	var missing string
-	expanded := os.Expand(string(raw), func(name string) string {
+	variablePattern := regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+	expanded := variablePattern.ReplaceAllStringFunc(string(raw), func(match string) string {
+		name := variablePattern.FindStringSubmatch(match)[1]
 		value, ok := os.LookupEnv(name)
 		if !ok && missing == "" {
 			missing = name
@@ -40,8 +43,8 @@ func Load(reader io.Reader) (Config, error) {
 
 func defaultConfig() Config {
 	return Config{
-		Server: ServerConfig{ListenAddress: ":8080", SessionHours: 12},
-		Audit: AuditConfig{Directory: "./data/audit", RetentionDays: 30, MaxFileSizeMB: 50},
+		Server:    ServerConfig{ListenAddress: ":8080", SessionHours: 12},
+		Audit:     AuditConfig{Directory: "./data/audit", RetentionDays: 30, MaxFileSizeMB: 50},
 		Dashboard: DashboardConfig{SampleIntervalSeconds: 15, HistoryPoints: 240},
 	}
 }

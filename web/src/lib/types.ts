@@ -1,0 +1,9 @@
+export type Cluster={id:string;name:string;online:boolean;error?:string;latencyMs:number;brokers:number;topics:number;partitions:number;consumerGroups:number;underReplicated:number;totalLag:number};
+export type TopicPartition={ID:number;Leader:number;Replicas:number[];ISR:number[];OfflineReplicas:number[]};
+export type Topic={Name:string;Internal:boolean;PartitionCount:number;ReplicationFactor:number;UnderReplicated:number;Partitions:TopicPartition[]};
+export type MessageRecord={topic:string;partition:number;offset:number;timestamp:number;key:string;value:string;headers:{key:string;value:string}[]};
+export type PartitionLag={topic:string;partition:number;currentOffset:number;endOffset:number;lag:number};
+export type ConsumerGroup={Name:string;State:string;Protocol:string;MemberCount:number;TotalLag:number;Partitions:PartitionLag[]};
+export type KafkaClusterConfig={id:string;name:string;brokers:string[];enabled?:boolean;security:{protocol:string;mechanism?:string;username?:string;password?:string;tls?:boolean}};
+export type AppConfig={server:{listenAddress:string;username:string;passwordHash:string;sessionHours:number};clusters:KafkaClusterConfig[];audit:{enabled?:boolean;directory:string;retentionDays:number;maxFileSizeMB:number};dashboard:{sampleIntervalSeconds:number;historyPoints:number}};
+export type AuditEntry={timestamp:string;username:string;clientIp?:string;clusterId?:string;action:string;resource?:string;result:string;durationMs?:number;error?:string};
