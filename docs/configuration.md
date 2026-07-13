@@ -14,16 +14,16 @@ server:
 clusters:
   - id: test
     name: 测试环境
-    brokers: ["121.41.66.5:19094"]
+    brokers: ["kafka-test.example.local:9092"]
     security:
       protocol: SASL_PLAINTEXT
       mechanism: PLAIN
-      username: kafka
-      password: "你的测试集群密码"
+      username: "your-kafka-username"
+      password: "your-kafka-password"
 
   - id: internal
     name: 内网环境
-    brokers: ["192.168.20.200:9092"]
+    brokers: ["kafka-internal.example.local:9092"]
     security:
       protocol: PLAINTEXT
 
@@ -38,7 +38,7 @@ dashboard:
   historyPoints: 240
 ```
 
-上面的测试环境对应原 kafka-ui 中的 `SASL_PLAINTEXT + PLAIN` 配置；Java 的 `sasl.jaas.config` 在本项目中拆分为 `mechanism`、`username` 和 `password`。内网环境沿用无认证的 `PLAINTEXT`。Kafka 密码直接填写在 YAML 中，不需要额外环境变量。
+示例中的地址和凭据均为虚假占位值。`SASL_PLAINTEXT + PLAIN` 对应 Java 配置中的 `security.protocol`、`sasl.mechanism` 和 `sasl.jaas.config`；在本项目中拆分为 `protocol`、`mechanism`、`username` 和 `password`。Kafka 密码直接填写在本地 `config.yaml` 中，不需要额外环境变量。
 
 ## Kafka 安全协议
 

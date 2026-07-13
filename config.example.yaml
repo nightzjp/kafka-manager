@@ -8,17 +8,17 @@ clusters:
   - id: test
     name: 测试环境
     brokers:
-      - 121.41.66.5:19094
+      - kafka-test.example.local:9092
     security:
       protocol: SASL_PLAINTEXT
       mechanism: PLAIN
-      username: kafka
-      password: "replace-with-test-kafka-password"
+      username: "your-kafka-username"
+      password: "your-kafka-password"
 
   - id: internal
     name: 内网环境
     brokers:
-      - 192.168.20.200:9092
+      - kafka-internal.example.local:9092
     security:
       protocol: PLAINTEXT
 
