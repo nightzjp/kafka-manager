@@ -31,6 +31,7 @@ export KAFKA_MANAGER_PASSWORD='change-me'
 ```bash
 cp configs/config.example.yaml config.yaml
 export KAFKA_MANAGER_SECRET_KEY='replace-with-at-least-32-random-bytes'
+export KAFKA_TEST_PASSWORD='测试集群密码'
 ./build/kafka-manager --config ./config.yaml
 ```
 

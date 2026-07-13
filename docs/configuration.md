@@ -12,20 +12,20 @@ server:
   sessionHours: 12
 
 clusters:
-  - id: dev
-    name: 开发环境
-    brokers: ["kafka-dev-1:9092", "kafka-dev-2:9092"]
-    security:
-      protocol: PLAINTEXT
-
   - id: test
     name: 测试环境
-    brokers: ["kafka-test-1:9092"]
+    brokers: ["121.41.66.5:19094"]
     security:
-      protocol: SASL_SSL
-      mechanism: SCRAM-SHA-256
-      username: "${KAFKA_TEST_USERNAME}"
+      protocol: SASL_PLAINTEXT
+      mechanism: PLAIN
+      username: kafka
       password: "${KAFKA_TEST_PASSWORD}"
+
+  - id: internal
+    name: 内网环境
+    brokers: ["192.168.20.200:9092"]
+    security:
+      protocol: PLAINTEXT
 
 audit:
   enabled: true
@@ -39,6 +39,12 @@ dashboard:
 ```
 
 仅 `${NAME}` 形式会展开环境变量；普通 `$` 会原样保留，因此不会破坏 Argon2id 哈希。
+
+上面的测试环境对应原 kafka-ui 中的 `SASL_PLAINTEXT + PLAIN` 配置；Java 的 `sasl.jaas.config` 在本项目中拆分为 `mechanism`、`username` 和 `password`。内网环境沿用无认证的 `PLAINTEXT`。启动前设置测试集群密码：
+
+```bash
+export KAFKA_TEST_PASSWORD='测试集群密码'
+```
 
 ## Kafka 安全协议
 

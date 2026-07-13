@@ -5,22 +5,22 @@ server:
   sessionHours: 12
 
 clusters:
-  - id: dev
-    name: 开发环境
-    brokers:
-      - localhost:9092
-    security:
-      protocol: PLAINTEXT
-
   - id: test
     name: 测试环境
     brokers:
-      - localhost:9093
+      - 121.41.66.5:19094
     security:
       protocol: SASL_PLAINTEXT
-      mechanism: SCRAM-SHA-256
-      username: "${KAFKA_TEST_USERNAME}"
+      mechanism: PLAIN
+      username: kafka
       password: "${KAFKA_TEST_PASSWORD}"
+
+  - id: internal
+    name: 内网环境
+    brokers:
+      - 192.168.20.200:9092
+    security:
+      protocol: PLAINTEXT
 
 audit:
   enabled: true
