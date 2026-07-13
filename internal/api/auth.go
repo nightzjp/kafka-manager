@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ const sessionCookieName = "kafka_manager_session"
 
 type AuthHandler struct {
 	username string
+	password string
 	hash     string
 	sessions *auth.SessionManager
 	mux      *http.ServeMux
@@ -26,8 +28,8 @@ type loginFailures struct {
 	firstAt time.Time
 }
 
-func NewAuthHandler(username, hash string, sessions *auth.SessionManager) *AuthHandler {
-	h := &AuthHandler{username: username, hash: hash, sessions: sessions, mux: http.NewServeMux(), failures: make(map[string]loginFailures)}
+func NewAuthHandler(username, password, hash string, sessions *auth.SessionManager) *AuthHandler {
+	h := &AuthHandler{username: username, password: password, hash: hash, sessions: sessions, mux: http.NewServeMux(), failures: make(map[string]loginFailures)}
 	h.mux.HandleFunc("POST /api/v1/auth/login", h.login)
 	h.mux.HandleFunc("POST /api/v1/auth/logout", h.logout)
 	h.mux.HandleFunc("GET /api/v1/auth/me", h.me)
@@ -54,7 +56,11 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request", "登录请求格式不正确")
 		return
 	}
-	if credentials.Username != h.username || !auth.VerifyPassword(h.hash, credentials.Password) {
+	passwordOK := subtle.ConstantTimeCompare([]byte(h.password), []byte(credentials.Password)) == 1
+	if h.password == "" {
+		passwordOK = auth.VerifyPassword(h.hash, credentials.Password)
+	}
+	if credentials.Username != h.username || !passwordOK {
 		h.recordFailure(client, time.Now())
 		writeError(w, http.StatusUnauthorized, "invalid_credentials", "用户名或密码错误")
 		return

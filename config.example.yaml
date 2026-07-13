@@ -1,7 +1,7 @@
 server:
   listenAddress: ":8080"
   username: admin
-  passwordHash: "replace-with-argon2id-hash"
+  password: "change-this-login-password"
   sessionHours: 12
 
 clusters:

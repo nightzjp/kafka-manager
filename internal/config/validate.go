@@ -9,8 +9,8 @@ func (c Config) Validate() error {
 	if strings.TrimSpace(c.Server.Username) == "" {
 		return fmt.Errorf("server username is required")
 	}
-	if strings.TrimSpace(c.Server.PasswordHash) == "" {
-		return fmt.Errorf("server passwordHash is required")
+	if c.Server.Password == "" && strings.TrimSpace(c.Server.PasswordHash) == "" {
+		return fmt.Errorf("server password is required")
 	}
 	if len(c.Clusters) == 0 {
 		return fmt.Errorf("at least one cluster is required")

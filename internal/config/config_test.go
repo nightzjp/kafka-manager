@@ -10,7 +10,7 @@ func TestLoadValidConfiguration(t *testing.T) {
 server:
   listenAddress: ":8080"
   username: admin
-  passwordHash: hash
+  password: login-secret
 clusters:
   - id: dev
     name: 开发环境
@@ -37,6 +37,9 @@ audit:
 	}
 	if len(cfg.Clusters) != 2 {
 		t.Fatalf("clusters = %d, want 2", len(cfg.Clusters))
+	}
+	if cfg.Server.Password != "login-secret" {
+		t.Fatalf("password = %q", cfg.Server.Password)
 	}
 	if cfg.Audit.RetentionDays != 30 {
 		t.Fatalf("retention = %d, want 30", cfg.Audit.RetentionDays)

@@ -10,7 +10,8 @@ type Config struct {
 type ServerConfig struct {
 	ListenAddress string `yaml:"listenAddress" json:"listenAddress"`
 	Username      string `yaml:"username" json:"username"`
-	PasswordHash  string `yaml:"passwordHash" json:"passwordHash"`
+	Password      string `yaml:"password,omitempty" json:"password,omitempty"`
+	PasswordHash  string `yaml:"passwordHash,omitempty" json:"passwordHash,omitempty"`
 	SessionHours  int    `yaml:"sessionHours" json:"sessionHours"`
 }
 

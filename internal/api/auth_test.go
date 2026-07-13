@@ -15,7 +15,7 @@ func TestLoginAndCurrentUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewAuthHandler("admin", hash, auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
+	handler := NewAuthHandler("admin", "", hash, auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
 
 	login := httptest.NewRecorder()
 	handler.ServeHTTP(login, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin","password":"secret-password"}`)))
@@ -41,7 +41,7 @@ func TestLoginRejectsInvalidCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewAuthHandler("admin", hash, auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
+	handler := NewAuthHandler("admin", "", hash, auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin","password":"wrong"}`)))
 	if response.Code != http.StatusUnauthorized {
@@ -50,7 +50,7 @@ func TestLoginRejectsInvalidCredentials(t *testing.T) {
 }
 
 func TestCurrentUserRequiresSession(t *testing.T) {
-	handler := NewAuthHandler("admin", "hash", auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
+	handler := NewAuthHandler("admin", "", "hash", auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/auth/me", nil))
 	if response.Code != http.StatusUnauthorized {
@@ -63,7 +63,7 @@ func TestLoginRateLimitsRepeatedFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := NewAuthHandler("admin", hash, auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
+	handler := NewAuthHandler("admin", "", hash, auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
 	for attempt := 1; attempt <= 6; attempt++ {
 		response := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin","password":"wrong"}`))
@@ -75,5 +75,14 @@ func TestLoginRateLimitsRepeatedFailures(t *testing.T) {
 		if attempt == 6 && response.Code != http.StatusTooManyRequests {
 			t.Fatalf("attempt %d status = %d, want 429", attempt, response.Code)
 		}
+	}
+}
+
+func TestLoginAcceptsPlaintextConfiguredPassword(t *testing.T) {
+	handler := NewAuthHandler("developer", "plain-login-password", "", auth.NewSessionManager([]byte("a-secret-key-with-at-least-32-bytes"), time.Hour))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"developer","password":"plain-login-password"}`)))
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
 	}
 }

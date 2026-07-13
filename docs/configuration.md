@@ -8,7 +8,7 @@ Kafka Manager 使用一个 YAML 文件作为配置唯一数据源。配置可以
 server:
   listenAddress: ":8080"
   username: admin
-  passwordHash: "$argon2id$..."
+  password: "change-this-login-password"
   sessionHours: 12
 
 clusters:
@@ -53,13 +53,7 @@ SASL 机制支持 `PLAIN`、`SCRAM-SHA-256`、`SCRAM-SHA-512`。
 
 ## 密码
 
-平台登录密码只保存 Argon2id 哈希：
-
-```bash
-KAFKA_MANAGER_PASSWORD='new-password' ./kafka-manager --print-password-hash
-```
-
-Kafka 密码保存在 YAML 中；Web 接口不会回显已有密码，留空表示保持原密码。请把配置文件权限设置为 `0600`，并确保 `config.yaml` 不提交到 Git。
+平台登录密码和 Kafka 密码都直接保存在本地 YAML 中；Web 接口不会回显已有密码，留空表示保持原密码。请把配置文件权限设置为 `0600`，并确保 `config.yaml` 不提交到 Git。
 
 ## 审计
 

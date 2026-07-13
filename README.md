@@ -9,7 +9,7 @@
 - 消息：按 Partition、起始位置、Offset 或时间读取，SSE 实时跟随，查看 Key、Value、Headers，并生产测试消息。
 - Consumer Group：成员、分区 Lag、删除和 Offset 重置。
 - 配置：Web 编辑、连接验证、YAML 原子写回、备份、Web 回滚和热加载。
-- 安全：单用户登录、Argon2id、签名 Cookie、登录限速和危险操作审计。
+- 安全：单用户登录、签名 Cookie、登录限速和危险操作审计。
 - 审计：按日期目录保存，按文件大小轮转并自动清理。
 
 不包含 Kafka Connect、Schema Registry、ksqlDB、Prometheus、数据库或 JVM 指标。
@@ -22,13 +22,6 @@
 pnpm --dir web install
 make build
 
-export KAFKA_MANAGER_PASSWORD='change-me'
-./build/kafka-manager --print-password-hash
-```
-
-复制示例配置并把生成的哈希写入 `server.passwordHash`：
-
-```bash
 cp config.example.yaml config.yaml
 ./build/kafka-manager --config ./config.yaml
 ```

@@ -36,7 +36,7 @@ type Server struct {
 func NewServer(cfg config.Config, store *config.Store, clusters *cluster.Manager, sessionKey []byte) *Server {
 	s := &Server{cfg: cfg, store: store, clusters: clusters, secret: append([]byte(nil), sessionKey...), history: make(map[string][]dashboardPoint)}
 	mux := http.NewServeMux()
-	authHandler := NewAuthHandler(cfg.Server.Username, cfg.Server.PasswordHash, auth.NewSessionManager(sessionKey, time.Duration(cfg.Server.SessionHours)*time.Hour))
+	authHandler := NewAuthHandler(cfg.Server.Username, cfg.Server.Password, cfg.Server.PasswordHash, auth.NewSessionManager(sessionKey, time.Duration(cfg.Server.SessionHours)*time.Hour))
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
 	mux.Handle("POST /api/v1/auth/login", authHandler)
 	mux.Handle("POST /api/v1/auth/logout", authHandler)
@@ -78,6 +78,7 @@ func (s *Server) getConfig(w http.ResponseWriter, _ *http.Request) {
 	cfg := s.cfg
 	s.mu.RUnlock()
 	cfg.Server.PasswordHash = ""
+	cfg.Server.Password = ""
 	cfg.Clusters = append([]config.ClusterConfig(nil), cfg.Clusters...)
 	for i := range cfg.Clusters {
 		cfg.Clusters[i].Security.Password = ""
@@ -98,6 +99,9 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 	s.mu.RUnlock()
 	if candidate.Server.PasswordHash == "" {
 		candidate.Server.PasswordHash = current.Server.PasswordHash
+	}
+	if candidate.Server.Password == "" {
+		candidate.Server.Password = current.Server.Password
 	}
 	for i := range candidate.Clusters {
 		if candidate.Clusters[i].Security.Password == "" {
