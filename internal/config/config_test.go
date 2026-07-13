@@ -113,6 +113,26 @@ func TestLoadPreservesDollarSignsOutsideBracedVariables(t *testing.T) {
 	}
 }
 
+func TestMarshalIncludesConfigurationCommentsAndReloads(t *testing.T) {
+	cfg, err := Load(strings.NewReader(validPrefix() + validAudit()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	for _, comment := range []string{"Web 服务与登录配置", "Kafka 集群列表", "审计日志", "首页监控采样"} {
+		if !strings.Contains(text, "# "+comment) {
+			t.Fatalf("missing comment %q in:\n%s", comment, text)
+		}
+	}
+	if _, err := Load(strings.NewReader(text)); err != nil {
+		t.Fatalf("commented output cannot reload: %v", err)
+	}
+}
+
 func validPrefix() string { return validPrefixWithBroker("localhost:9092") }
 
 func validPrefixWithBroker(broker string) string {

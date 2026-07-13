@@ -18,7 +18,6 @@ import (
 	messageService "github.com/nightzjp/kafka-manager/internal/kafka/message"
 	topicService "github.com/nightzjp/kafka-manager/internal/kafka/topic"
 	"github.com/twmb/franz-go/pkg/kadm"
-	"gopkg.in/yaml.v3"
 )
 
 type Server struct {
@@ -117,7 +116,7 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_config", err.Error())
 		return
 	}
-	data, err := yaml.Marshal(candidate)
+	data, err := config.Marshal(candidate)
 	if err != nil {
 		writeError(w, 500, "encode_config", err.Error())
 		return

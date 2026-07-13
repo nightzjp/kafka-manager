@@ -1,9 +1,17 @@
+# Kafka Manager 配置文件
+# 复制为 config.yaml 后修改；config.yaml 包含凭据，必须设置 0600 权限且不要提交到 Git。
+
+# Web 服务与登录配置
+# listenAddress 支持 ":8080"（所有网卡）或 "127.0.0.1:8080"（仅本机）。
 server:
   listenAddress: ":8080"
   username: admin
   password: "change-this-login-password"
   sessionHours: 12
 
+# Kafka 集群列表，可继续追加。
+# protocol: PLAINTEXT / SSL / SASL_PLAINTEXT / SASL_SSL
+# SASL mechanism: PLAIN / SCRAM-SHA-256 / SCRAM-SHA-512
 clusters:
   - id: test
     name: 测试环境
@@ -22,12 +30,14 @@ clusters:
     security:
       protocol: PLAINTEXT
 
+# 审计日志按日期建目录，并按 maxFileSizeMB 轮转。
 audit:
   enabled: true
   directory: ./data/audit
   retentionDays: 30
   maxFileSizeMB: 50
 
+# 首页监控采样间隔（秒）和内存中保留的历史点数。
 dashboard:
   sampleIntervalSeconds: 15
   historyPoints: 240
