@@ -41,6 +41,8 @@ dashboard:
   historyPoints: 240
 ```
 
+Dashboard 由 Go 服务后台持续采样，与浏览器是否打开无关。`sampleIntervalSeconds` 范围为 `5-3600` 秒；`historyPoints` 范围为 `2-10000`，每个集群分别保存在内存中。默认的 15 秒和 240 点适合日常使用；缩短间隔会提高 Kafka 管理查询频率，增大历史点数会增加内存占用。离线集群会自动指数退避，最长 5 分钟后重试。
+
 示例中的地址和凭据均为虚假占位值。`SASL_PLAINTEXT + PLAIN` 对应 Java 配置中的 `security.protocol`、`sasl.mechanism` 和 `sasl.jaas.config`；在本项目中拆分为 `protocol`、`mechanism`、`username` 和 `password`。Kafka 密码直接填写在本地 `config.yaml` 中，不需要额外环境变量。
 
 ## Kafka 安全协议

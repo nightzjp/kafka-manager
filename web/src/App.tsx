@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ErrorNotice, Loading } from './components/Common';
 import { Icon, IconName } from './components/Icon';
 import { LoginPage } from './features/auth/LoginPage';
 import { api } from './lib/api';
 import { Cluster, DashboardPoint, Topic } from './lib/types';
 import { AppRoute, buildRoutePath, Page, parseRoutePath } from './navigation/routes';
+import { connectionView, DashboardLoadState } from './navigation/connection-state';
+import { RequestSequence } from './navigation/request-sequence';
 import { readSidebarCollapsed, writeSidebarCollapsed } from './navigation/sidebar-state';
 import { AuditPage } from './pages/AuditPage';
 import { ConsumersPage } from './pages/ConsumersPage';
@@ -32,6 +34,8 @@ export function App() {
   const [route, setRoute] = useState<AppRoute>(() => parseRoutePath(window.location.pathname));
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [history, setHistory] = useState<Record<string, DashboardPoint[]>>({});
+  const [dashboardState, setDashboardState] = useState<DashboardLoadState>('idle');
+  const dashboardRequests = useRef(new RequestSequence());
   const [selectedTopic, setSelectedTopic] = useState<{ clusterId: string; item: Topic }>();
   const [topicLoading, setTopicLoading] = useState(Boolean(route.topicName));
   const [topicError, setTopicError] = useState('');
@@ -45,10 +49,20 @@ export function App() {
     setRoute(next);
     setMenuOpen(false);
   }, []);
-  const loadClusters = useCallback(() => api.get<{ items: Cluster[]; history: Record<string, DashboardPoint[]> }>('/api/v1/dashboard').then(({ items, history: points }) => {
-    setClusters(items);
-    setHistory(points || {});
-  }), []);
+  const loadClusters = useCallback(async () => {
+    const request = dashboardRequests.current.begin();
+    setDashboardState((current) => current === 'idle' ? 'loading' : current);
+    try {
+      const { items, history: points } = await api.get<{ items: Cluster[]; history: Record<string, DashboardPoint[]> }>('/api/v1/dashboard');
+      if (!dashboardRequests.current.isCurrent(request)) return;
+      setClusters(items);
+      setHistory(points || {});
+      setDashboardState('ready');
+    } catch {
+      if (!dashboardRequests.current.isCurrent(request)) return;
+      setDashboardState('error');
+    }
+  }, []);
   const loadTopic = useCallback(async (id: string, name: string) => {
     const { items } = await api.get<{ items: Topic[] }>(`/api/v1/clusters/${id}/topics?search=${encodeURIComponent(name)}&pageSize=200`);
     const found = selectExactTopic(items, name);
@@ -64,7 +78,12 @@ export function App() {
     addEventListener('popstate', backOrForward);
     return () => { removeEventListener('session-expired', expire); removeEventListener('popstate', backOrForward); };
   }, []);
-  useEffect(() => { if (authenticated) loadClusters().catch(() => {}); }, [authenticated, loadClusters]);
+  useEffect(() => {
+    if (!authenticated) return;
+    void loadClusters();
+    const timer = window.setInterval(() => void loadClusters(), 15_000);
+    return () => window.clearInterval(timer);
+  }, [authenticated, loadClusters]);
   useEffect(() => { writeSidebarCollapsed(window.localStorage, sidebarCollapsed); }, [sidebarCollapsed]);
 
   const clusterId = route.clusterId && clusters.some((cluster) => cluster.id === route.clusterId) ? route.clusterId : clusters[0]?.id || route.clusterId || '';
@@ -103,6 +122,7 @@ export function App() {
   if (!authenticated) return <LoginPage onSuccess={() => setAuthenticated(true)} />;
 
   const current = clusters.find((item) => item.id === clusterId);
+  const connection = connectionView(current, dashboardState);
   const topic = route.topicName && selectedTopic?.clusterId === clusterId && selectedTopic.item.Name === route.topicName ? selectedTopic.item : undefined;
   const changePage = (page: Page) => navigate({ page, clusterId });
   const openTopic = (item: Topic, tab: 'overview' | 'messages' = 'overview') => {
@@ -115,15 +135,15 @@ export function App() {
       <div className="brand"><div className="logo-mark">K</div><div className="brand-copy"><b>Kafka Manager</b><span>Developer Console</span></div></div>
       <nav id="primary-navigation">{nav.map((item) => <button key={item.id} data-label={item.label} aria-label={sidebarCollapsed ? item.label : undefined} className={route.page === item.id && !route.topicName ? 'active' : ''} onClick={() => changePage(item.id)}><Icon name={item.icon} /><span>{item.label}</span></button>)}</nav>
       <div className="sidebar-utilities">
-        <div className="sidebar-foot"><span className={`health-dot ${clusters.some((cluster) => !cluster.online) ? 'warn' : ''}`} /><span className="sidebar-foot-copy">{clusters.filter((cluster) => cluster.online).length}/{clusters.length} 集群在线</span></div>
+        <div className="sidebar-foot"><span className={`health-dot ${clusters.some((cluster) => cluster.status === 'offline' || (!cluster.status && !cluster.online)) ? 'warn' : ''}`} /><span className="sidebar-foot-copy">{clusters.length ? `${clusters.filter((cluster) => cluster.online).length}/${clusters.length} 集群在线` : dashboardState === 'error' ? '集群状态不可用' : '正在载入集群状态'}</span></div>
         <button className="sidebar-toggle" aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} aria-controls="primary-navigation" aria-expanded={!sidebarCollapsed} title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'} onClick={() => setSidebarCollapsed((value) => !value)}><Icon name={sidebarCollapsed ? 'arrow' : 'back'} /><span className="sidebar-toggle-copy">{sidebarCollapsed ? '展开侧栏' : '收起侧栏'}</span></button>
       </div>
     </aside>
     {menuOpen && <button className="nav-scrim" aria-label="关闭导航" onClick={() => setMenuOpen(false)} />}
     <section className={`workspace ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      <header className="topbar"><button className="icon-button mobile-menu" aria-label="打开导航" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><div className="cluster-picker"><span>当前集群</span><select value={clusterId} onChange={(event) => navigate({ page: route.page, clusterId: event.target.value })}>{clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.name}</option>)}</select>{current?.readOnly && <span className="readonly-badge">只读</span>}</div><div className="top-actions"><span className={`connection ${current?.online ? 'online' : 'offline'}`}><i />{current?.online ? `在线 · ${current.latencyMs}ms` : '连接中断'}</span><ThemeSwitch mode={mode} setMode={setMode} /><button className="icon-button" title="退出登录" onClick={() => api.post('/api/v1/auth/logout', {}).finally(() => setAuthenticated(false))}><Icon name="logout" /></button></div></header>
+      <header className="topbar"><button className="icon-button mobile-menu" aria-label="打开导航" onClick={() => setMenuOpen(true)}><Icon name="menu" /></button><div className="cluster-picker"><span>当前集群</span><select value={clusterId} disabled={clusters.length === 0} onChange={(event) => navigate({ page: route.page, clusterId: event.target.value })}>{clusters.map((cluster) => <option key={cluster.id} value={cluster.id}>{cluster.name}</option>)}</select>{current?.readOnly && <span className="readonly-badge">只读</span>}</div><div className="top-actions"><span className={`connection connection-${connection.tone}`}><i />{connection.label}</span><ThemeSwitch mode={mode} setMode={setMode} /><button className="icon-button" title="退出登录" onClick={() => api.post('/api/v1/auth/logout', {}).finally(() => setAuthenticated(false))}><Icon name="logout" /></button></div></header>
       <main className="content">{route.topicName ? topicLoading ? <Loading /> : topicError ? <TopicRouteError message={topicError} back={() => navigate({ page: 'topics', clusterId }, true)} /> : topic ? <TopicWorkspace clusterId={clusterId} topic={topic} tab={route.topicTab || 'overview'} setTab={(topicTab) => navigate({ ...route, topicTab })} onBack={() => navigate({ page: 'topics', clusterId })} onRefresh={refreshTopic} readOnly={Boolean(current?.readOnly)} /> : null : <>
-        {route.page === 'dashboard' && <DashboardPage clusters={clusters} history={history} refresh={loadClusters} openCluster={(id, page) => navigate({ page, clusterId: id })} />}
+        {route.page === 'dashboard' && <DashboardPage clusters={clusters} history={history} loadState={dashboardState} refresh={loadClusters} openCluster={(id, page) => navigate({ page, clusterId: id })} />}
         {route.page === 'topics' && <TopicsPage clusterId={clusterId} onOpen={openTopic} readOnly={Boolean(current?.readOnly)} />}
         {route.page === 'messages' && <MessagesPage clusterId={clusterId} readOnly={Boolean(current?.readOnly)} />}
         {route.page === 'consumers' && <ConsumersPage clusterId={clusterId} readOnly={Boolean(current?.readOnly)} />}

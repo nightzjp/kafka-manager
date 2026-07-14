@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -62,15 +63,31 @@ func main() {
 	cleanupBackups()
 	manager := cluster.NewManager(cluster.KafkaFactory{})
 	defer manager.Close()
+	manager.SetDesired(cfg.Clusters)
 	connect := func(current config.Config) {
+		semaphore := make(chan struct{}, 4)
+		var connections sync.WaitGroup
+		active := make(map[string]struct{}, len(current.Clusters))
 		for _, item := range current.Clusters {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			err := manager.Upsert(ctx, item)
-			cancel()
-			if err != nil {
-				log.Printf("cluster %s offline: %v", item.ID, err)
+			if item.Enabled != nil && !*item.Enabled {
+				continue
 			}
+			active[item.ID] = struct{}{}
+			item := item
+			connections.Add(1)
+			go func() {
+				defer connections.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := manager.Upsert(ctx, item); err != nil {
+					log.Printf("cluster %s offline: %v", item.ID, err)
+				}
+			}()
 		}
+		connections.Wait()
+		manager.Retain(active)
 	}
 	connect(cfg)
 	handler := api.NewServer(cfg, store, manager, secret)
@@ -95,8 +112,13 @@ func main() {
 			log.Printf("configuration reload rejected: %v", decryptErr)
 			return
 		}
-		connect(runtimeCfg)
-		handler.UpdateConfig(runtimeCfg)
+		connectCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		reconcileErr := handler.ReconcileConfig(connectCtx, runtimeCfg)
+		cancel()
+		if reconcileErr != nil {
+			log.Printf("configuration reload rejected: %v", reconcileErr)
+			return
+		}
 		log.Printf("configuration reloaded")
 	})
 	if err != nil {
@@ -104,6 +126,7 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go handler.RunDashboard(ctx)
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()

@@ -40,7 +40,8 @@ audit:
   maxFileSizeMB: 50
   configBackupRetentionDays: 30
 
-# 首页监控采样间隔（秒）和内存中保留的历史点数。
+# 首页由 Go 后台持续采样，和浏览器是否打开无关。
+# sampleIntervalSeconds 范围 5-3600；historyPoints 范围 2-10000，增大会占用更多内存。
 dashboard:
   sampleIntervalSeconds: 15
   historyPoints: 240

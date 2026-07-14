@@ -1,15 +1,15 @@
 import { expect, Page, test } from '@playwright/test';
 
 const cluster = {
-  id: 'protected', name: '受保护集群', online: true, latencyMs: 12, brokers: 3, topics: 1,
-  partitions: 3, consumerGroups: 1, underReplicated: 0, totalLag: 12, readOnly: true,
+  id: 'protected', name: '受保护集群', status: 'online', online: true, sampledAt: 1783929198754, latencyMs: 12, brokers: 3, topics: 1,
+  partitions: 3, consumerGroups: 1, underReplicated: 0, totalLag: 12, lagAvailable: true, readOnly: true,
 };
 const topic = {
   Name: 'orders.v1', Internal: false, PartitionCount: 3, ReplicationFactor: 3, UnderReplicated: 0,
   Partitions: [{ ID: 0, Leader: 1, Replicas: [1, 2, 3], ISR: [1, 2, 3], OfflineReplicas: [] }],
 };
 
-async function mockApplication(page: Page, authenticated = true) {
+async function mockApplication(page: Page, authenticated = true, dashboardDelay = 0) {
   let signedIn = authenticated;
   await page.addInitScript(() => {
     if (!sessionStorage.getItem('kafka-manager.e2e-initialized')) {
@@ -23,7 +23,10 @@ async function mockApplication(page: Page, authenticated = true) {
     const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (path === '/api/v1/auth/me') return signedIn ? json({ username: 'admin' }) : json({ error: { message: '未登录' } }, 401);
     if (path === '/api/v1/auth/login') { signedIn = true; return json({ status: 'ok' }); }
-    if (path === '/api/v1/dashboard') return json({ items: [cluster], history: { protected: [] } });
+    if (path === '/api/v1/dashboard') {
+      if (dashboardDelay) await new Promise((resolve) => setTimeout(resolve, dashboardDelay));
+      return json({ items: [cluster], history: { protected: [] } });
+    }
     if (path === '/api/v1/clusters/protected/topics') return json({ items: [topic], total: 1, page: 1, pageSize: 200 });
     if (path === '/api/v1/clusters/protected/messages') return json({
       items: [{ topic: 'orders.v1', partition: 0, offset: 42, timestamp: 1783929198754, key: 'device-1', value: '{"sn":"541288EPC11C0013D5967C34","used":51583}', headers: [] }],
@@ -37,6 +40,16 @@ async function mockApplication(page: Page, authenticated = true) {
     return json({ items: [] });
   });
 }
+
+test('shows a neutral loading state while the initial dashboard snapshot is pending', async ({ page }) => {
+  await mockApplication(page, true, 500);
+  await page.goto('/');
+  await expect(page.getByText('正在获取状态')).toBeVisible();
+  await expect(page.getByText('Kafka 连接中断')).toHaveCount(0);
+  await expect(page.getByText('所有集群连接正常')).toHaveCount(0);
+  await expect(page.getByText('当前没有积压')).toHaveCount(0);
+  await expect(page.locator('.connection').getByText('在线 · 12ms')).toBeVisible();
+});
 
 test('logs in and keeps the desktop sidebar preference', async ({ page }) => {
   await mockApplication(page, false);

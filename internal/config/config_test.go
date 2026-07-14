@@ -81,6 +81,9 @@ func TestLoadRejectsInvalidConfiguration(t *testing.T) {
 		{"sasl missing mechanism", validPrefixWithProtocol("SASL_PLAINTEXT") + validAudit(), "mechanism"},
 		{"invalid retention", validPrefix() + "audit:\n  retentionDays: 0\n  maxFileSizeMB: 50\n", "retentionDays"},
 		{"invalid backup retention", validPrefix() + "audit:\n  retentionDays: 30\n  maxFileSizeMB: 50\n  configBackupRetentionDays: 0\n", "configBackupRetentionDays"},
+		{"sampling interval too small", validPrefix() + validAudit() + "dashboard:\n  sampleIntervalSeconds: 1\n  historyPoints: 240\n", "sampleIntervalSeconds"},
+		{"history too small", validPrefix() + validAudit() + "dashboard:\n  sampleIntervalSeconds: 15\n  historyPoints: 1\n", "historyPoints"},
+		{"history too large", validPrefix() + validAudit() + "dashboard:\n  sampleIntervalSeconds: 15\n  historyPoints: 10001\n", "historyPoints"},
 		{"unknown yaml field", validPrefix() + validAudit() + "unknown: true\n", "field unknown"},
 	}
 

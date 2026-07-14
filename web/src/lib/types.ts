@@ -1,4 +1,4 @@
-export type Cluster={id:string;name:string;online:boolean;error?:string;latencyMs:number;brokers:number;topics:number;partitions:number;consumerGroups:number;underReplicated:number;totalLag:number;readOnly:boolean};
+export type Cluster={id:string;name:string;status?:'loading'|'online'|'offline';online:boolean;error?:string;sampledAt?:number;latencyMs:number;brokers:number;topics:number;partitions:number;consumerGroups:number;underReplicated:number;totalLag:number;lagAvailable?:boolean;lagError?:string;readOnly:boolean};
 export type TopicPartition={ID:number;Leader:number;Replicas:number[];ISR:number[];OfflineReplicas:number[]};
 export type Topic={Name:string;Internal:boolean;PartitionCount:number;ReplicationFactor:number;UnderReplicated:number;Partitions:TopicPartition[]};
 export type MessageRecord={topic:string;partition:number;offset:number;timestamp:number;key:string;value:string;headers:{key:string;value:string}[]};

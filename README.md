@@ -4,7 +4,7 @@
 
 ## 功能
 
-- 多集群状态首页：Broker、Topic、Partition、Consumer Group、ISR 异常、总 Lag 和短期 Lag 趋势。
+- 多集群状态首页：Go 后台独立并发采样并缓存 Broker、Topic、Partition、Consumer Group、ISR 异常、总 Lag 和短期趋势；浏览器数量不会增加 Kafka 查询压力。
 - Topic 工作台：搜索、概览、创建、删除、扩分区和运行配置修改；进入 Topic 后可直接查看消息，不需要再次填写 Topic 名称。
 - 消息：按 Partition、起始位置、Offset 或时间读取，SSE 实时跟随，查看 Key、Value、Headers，并生产测试消息；JSON 自动识别、格式化、折叠和复制，仍支持原始文本。
 - Consumer Group：成员、分区 Lag、删除和 Offset 重置。

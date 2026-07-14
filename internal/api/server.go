@@ -14,26 +14,31 @@ import (
 	"github.com/nightzjp/kafka-manager/internal/auth"
 	"github.com/nightzjp/kafka-manager/internal/cluster"
 	"github.com/nightzjp/kafka-manager/internal/config"
+	"github.com/nightzjp/kafka-manager/internal/dashboard"
 	consumerService "github.com/nightzjp/kafka-manager/internal/kafka/consumer"
 	messageService "github.com/nightzjp/kafka-manager/internal/kafka/message"
 	topicService "github.com/nightzjp/kafka-manager/internal/kafka/topic"
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 type Server struct {
 	mu          sync.RWMutex
+	configTxn   sync.RWMutex
 	cfg         config.Config
 	store       *config.Store
 	clusters    *cluster.Manager
 	secret      []byte
 	auditWriter *audit.Writer
 	auditDir    string
-	history     map[string][]dashboardPoint
+	monitor     *dashboard.Sampler
 	handler     http.Handler
 }
 
 func NewServer(cfg config.Config, store *config.Store, clusters *cluster.Manager, sessionKey []byte) *Server {
-	s := &Server{cfg: cfg, store: store, clusters: clusters, secret: append([]byte(nil), sessionKey...), history: make(map[string][]dashboardPoint)}
+	clusters.SetDesired(cfg.Clusters)
+	monitor := dashboard.NewSampler(cfg.Clusters, dashboardOptions(cfg), dashboard.KafkaSource{Clusters: clusters})
+	s := &Server{cfg: cfg, store: store, clusters: clusters, secret: append([]byte(nil), sessionKey...), monitor: monitor}
 	mux := http.NewServeMux()
 	authHandler := NewAuthHandler(cfg.Server.Username, cfg.Server.Password, cfg.Server.PasswordHash, auth.NewSessionManager(sessionKey, time.Duration(cfg.Server.SessionHours)*time.Hour))
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
@@ -65,7 +70,18 @@ func NewServer(cfg config.Config, store *config.Store, clusters *cluster.Manager
 	return s
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
-func (s *Server) UpdateConfig(cfg config.Config)                   { s.mu.Lock(); s.cfg = cfg; s.mu.Unlock() }
+func (s *Server) UpdateConfig(cfg config.Config) {
+	s.configTxn.Lock()
+	defer s.configTxn.Unlock()
+	s.updateConfig(cfg)
+}
+func (s *Server) updateConfig(cfg config.Config) {
+	s.mu.Lock()
+	s.cfg = cfg
+	s.mu.Unlock()
+	s.monitor.Update(cfg.Clusters, dashboardOptions(cfg))
+}
+func (s *Server) RunDashboard(ctx context.Context) { s.monitor.Run(ctx) }
 func (s *Server) SetAudit(writer *audit.Writer, directory string) {
 	s.mu.Lock()
 	s.auditWriter = writer
@@ -93,6 +109,8 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &candidate) {
 		return
 	}
+	s.configTxn.Lock()
+	defer s.configTxn.Unlock()
 	s.mu.RLock()
 	current := s.cfg
 	s.mu.RUnlock()
@@ -121,16 +139,22 @@ func (s *Server) putConfig(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "encode_config", err.Error())
 		return
 	}
-	if err := s.clusters.Apply(r.Context(), candidate.Clusters); err != nil {
+	connectionsChanged, err := s.applyClustersIfChanged(r.Context(), candidate.Clusters)
+	if err != nil {
 		writeError(w, 400, "connection_failed", err.Error())
 		return
 	}
 	if _, err := s.store.Save(data); err != nil {
-		_ = s.clusters.Apply(context.Background(), current.Clusters)
+		if connectionsChanged {
+			if rollbackErr := s.rollbackClusters(current.Clusters); rollbackErr != nil {
+				writeError(w, 500, "save_config", fmt.Sprintf("%v; restore previous cluster connections: %v", err, rollbackErr))
+				return
+			}
+		}
 		writeError(w, 500, "save_config", err.Error())
 		return
 	}
-	s.UpdateConfig(candidate)
+	s.updateConfig(candidate)
 	s.recordAudit(r, "config.update", "config.yaml", nil)
 	w.WriteHeader(204)
 }
@@ -161,22 +185,63 @@ func (s *Server) restoreConfigBackup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "backup_decrypt", err.Error())
 		return
 	}
-	if err := s.clusters.Apply(r.Context(), runtimeCfg.Clusters); err != nil {
+	s.configTxn.Lock()
+	defer s.configTxn.Unlock()
+	s.mu.RLock()
+	current := s.cfg
+	s.mu.RUnlock()
+	connectionsChanged, err := s.applyClustersIfChanged(r.Context(), runtimeCfg.Clusters)
+	if err != nil {
 		writeError(w, 400, "connection_failed", err.Error())
 		return
 	}
 	if _, err = s.store.Save(data); err != nil {
-		s.mu.RLock()
-		current := s.cfg
-		s.mu.RUnlock()
-		_ = s.clusters.Apply(context.Background(), current.Clusters)
+		if connectionsChanged {
+			if rollbackErr := s.rollbackClusters(current.Clusters); rollbackErr != nil {
+				writeError(w, 500, "backup_restore", fmt.Sprintf("%v; restore previous cluster connections: %v", err, rollbackErr))
+				return
+			}
+		}
 		writeError(w, 500, "backup_restore", err.Error())
 		return
 	}
-	s.UpdateConfig(runtimeCfg)
+	s.updateConfig(runtimeCfg)
 	s.recordAudit(r, "config.restore", r.PathValue("backup"), nil)
 	w.WriteHeader(204)
 }
+
+func (s *Server) applyClustersIfChanged(ctx context.Context, clusters []config.ClusterConfig) (bool, error) {
+	if s.clusters.Matches(clusters) {
+		return false, nil
+	}
+	if err := s.clusters.Apply(ctx, clusters); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *Server) rollbackClusters(clusters []config.ClusterConfig) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.clusters.Apply(ctx, clusters); err != nil {
+		s.clusters.SetDesired(clusters)
+		return err
+	}
+	return nil
+}
+
+// ReconcileConfig atomically switches the Kafka clients and the configuration
+// observed by request handlers during an external file hot reload.
+func (s *Server) ReconcileConfig(ctx context.Context, cfg config.Config) error {
+	s.configTxn.Lock()
+	defer s.configTxn.Unlock()
+	if _, err := s.applyClustersIfChanged(ctx, cfg.Clusters); err != nil {
+		return err
+	}
+	s.updateConfig(cfg)
+	return nil
+}
+
 func (s *Server) clusterConfig(id string) (config.ClusterConfig, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -188,6 +253,26 @@ func (s *Server) clusterConfig(id string) (config.ClusterConfig, bool) {
 	return config.ClusterConfig{}, false
 }
 func (s *Server) kafka(id string) (*kadm.Client, config.ClusterConfig, error) {
+	s.configTxn.RLock()
+	defer s.configTxn.RUnlock()
+	return s.kafkaLocked(id)
+}
+
+func (s *Server) kafkaLocked(id string) (*kadm.Client, config.ClusterConfig, error) {
+	client, cfg, err := s.kafkaClientLocked(id)
+	if err != nil {
+		return nil, cfg, err
+	}
+	return kadm.NewClient(client), cfg, nil
+}
+
+func (s *Server) kafkaClient(id string) (*kgo.Client, config.ClusterConfig, error) {
+	s.configTxn.RLock()
+	defer s.configTxn.RUnlock()
+	return s.kafkaClientLocked(id)
+}
+
+func (s *Server) kafkaClientLocked(id string) (*kgo.Client, config.ClusterConfig, error) {
 	cfg, ok := s.clusterConfig(id)
 	if !ok {
 		return nil, cfg, fmt.Errorf("cluster %q not found", id)
@@ -196,10 +281,12 @@ func (s *Server) kafka(id string) (*kadm.Client, config.ClusterConfig, error) {
 	if !ok {
 		return nil, cfg, fmt.Errorf("cluster %q is offline", id)
 	}
-	return kadm.NewClient(client), cfg, nil
+	return client, cfg, nil
 }
 
 func (s *Server) writableKafka(w http.ResponseWriter, r *http.Request, action, resource string) (*kadm.Client, config.ClusterConfig, bool) {
+	s.configTxn.RLock()
+	defer s.configTxn.RUnlock()
 	cfg, exists := s.clusterConfig(r.PathValue("cluster"))
 	if !exists {
 		writeError(w, http.StatusServiceUnavailable, "cluster_unavailable", fmt.Sprintf("cluster %q not found", r.PathValue("cluster")))
@@ -211,7 +298,7 @@ func (s *Server) writableKafka(w http.ResponseWriter, r *http.Request, action, r
 		writeError(w, http.StatusForbidden, "cluster_read_only", operationErr.Error())
 		return nil, cfg, false
 	}
-	admin, cfg, err := s.kafka(r.PathValue("cluster"))
+	admin, cfg, err := s.kafkaLocked(r.PathValue("cluster"))
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "cluster_unavailable", err.Error())
 		return nil, cfg, false
@@ -219,113 +306,43 @@ func (s *Server) writableKafka(w http.ResponseWriter, r *http.Request, action, r
 	return admin, cfg, true
 }
 
-type clusterSummary struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Online          bool   `json:"online"`
-	Error           string `json:"error,omitempty"`
-	LatencyMS       int64  `json:"latencyMs"`
-	Brokers         int    `json:"brokers"`
-	Topics          int    `json:"topics"`
-	Partitions      int    `json:"partitions"`
-	ConsumerGroups  int    `json:"consumerGroups"`
-	UnderReplicated int    `json:"underReplicated"`
-	TotalLag        int64  `json:"totalLag"`
-	ReadOnly        bool   `json:"readOnly"`
-}
-type dashboardPoint struct {
-	Timestamp  int64 `json:"timestamp"`
-	TotalLag   int64 `json:"totalLag"`
-	Partitions int   `json:"partitions"`
-	Topics     int   `json:"topics"`
+func (s *Server) writableKafkaClient(w http.ResponseWriter, r *http.Request, action, resource string) (*kgo.Client, config.ClusterConfig, bool) {
+	s.configTxn.RLock()
+	defer s.configTxn.RUnlock()
+	cfg, exists := s.clusterConfig(r.PathValue("cluster"))
+	if !exists {
+		writeError(w, http.StatusServiceUnavailable, "cluster_unavailable", fmt.Sprintf("cluster %q not found", r.PathValue("cluster")))
+		return nil, cfg, false
+	}
+	if cfg.ReadOnly {
+		operationErr := fmt.Errorf("集群 %s 已启用只读模式，禁止执行写操作", cfg.Name)
+		s.recordAudit(r, action, resource, operationErr)
+		writeError(w, http.StatusForbidden, "cluster_read_only", operationErr.Error())
+		return nil, cfg, false
+	}
+	client, cfg, err := s.kafkaClientLocked(r.PathValue("cluster"))
+	if err != nil {
+		writeError(w, http.StatusServiceUnavailable, "cluster_unavailable", err.Error())
+		return nil, cfg, false
+	}
+	return client, cfg, true
 }
 
-func (s *Server) listClusters(w http.ResponseWriter, r *http.Request) {
-	s.mu.RLock()
-	configs := append([]config.ClusterConfig(nil), s.cfg.Clusters...)
-	s.mu.RUnlock()
-	items := make([]clusterSummary, 0, len(configs))
-	for _, cfg := range configs {
-		items = append(items, s.snapshot(r.Context(), cfg))
-	}
+func (s *Server) listClusters(w http.ResponseWriter, _ *http.Request) {
+	items, _ := s.monitor.Read()
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
-func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
-	s.mu.RLock()
-	configs := append([]config.ClusterConfig(nil), s.cfg.Clusters...)
-	points := s.cfg.Dashboard.HistoryPoints
-	s.mu.RUnlock()
-	if points < 2 {
-		points = 20
-	}
-	items := make([]clusterSummary, 0, len(configs))
-	now := time.Now().UnixMilli()
-	for _, cfg := range configs {
-		items = append(items, s.snapshot(r.Context(), cfg))
-	}
-	s.mu.Lock()
-	for _, item := range items {
-		history := append(s.history[item.ID], dashboardPoint{Timestamp: now, TotalLag: item.TotalLag, Partitions: item.Partitions, Topics: item.Topics})
-		if len(history) > points {
-			history = history[len(history)-points:]
-		}
-		s.history[item.ID] = history
-	}
-	history := make(map[string][]dashboardPoint, len(s.history))
-	for id, values := range s.history {
-		history[id] = append([]dashboardPoint(nil), values...)
-	}
-	s.mu.Unlock()
+func (s *Server) dashboard(w http.ResponseWriter, _ *http.Request) {
+	items, history := s.monitor.Read()
 	writeJSON(w, 200, map[string]any{"items": items, "history": history})
 }
-func (s *Server) snapshot(parent context.Context, cfg config.ClusterConfig) clusterSummary {
-	result := clusterSummary{ID: cfg.ID, Name: cfg.Name, ReadOnly: cfg.ReadOnly}
-	client, ok := s.clusters.Kafka(cfg.ID)
-	if !ok {
-		result.Error = "集群未连接"
-		return result
+
+func dashboardOptions(cfg config.Config) dashboard.Options {
+	return dashboard.Options{
+		Interval:      time.Duration(cfg.Dashboard.SampleIntervalSeconds) * time.Second,
+		HistoryPoints: cfg.Dashboard.HistoryPoints,
+		MaxConcurrent: 4,
 	}
-	ctx, cancel := context.WithTimeout(parent, 4*time.Second)
-	defer cancel()
-	start := time.Now()
-	admin := kadm.NewClient(client)
-	brokers, err := admin.ListBrokers(ctx)
-	if err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	topics, err := admin.ListTopics(ctx)
-	if err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	groups, err := admin.ListGroups(ctx)
-	if err != nil {
-		result.Error = err.Error()
-		return result
-	}
-	result.Online = true
-	result.LatencyMS = time.Since(start).Milliseconds()
-	result.Brokers = len(brokers)
-	result.Topics = len(topics)
-	result.ConsumerGroups = len(groups)
-	for _, t := range topics {
-		result.Partitions += len(t.Partitions)
-		for _, p := range t.Partitions {
-			if len(p.ISR) < len(p.Replicas) {
-				result.UnderReplicated++
-			}
-		}
-	}
-	if len(groups) > 0 {
-		lags, e := admin.Lag(ctx, groups.Groups()...)
-		if e == nil {
-			for _, g := range lags {
-				result.TotalLag += g.Lag.Total()
-			}
-		}
-	}
-	return result
 }
 
 func (s *Server) listTopics(w http.ResponseWriter, r *http.Request) {
@@ -432,12 +449,11 @@ func (s *Server) listMessages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_message_filter", err.Error())
 		return
 	}
-	_, cfg, err := s.kafka(r.PathValue("cluster"))
+	client, cfg, err := s.kafkaClient(r.PathValue("cluster"))
 	if err != nil {
 		writeError(w, 503, "cluster_unavailable", err.Error())
 		return
 	}
-	client, _ := s.clusters.Kafka(cfg.ID)
 	result, err := messageService.NewService(messageService.NewKafkaBackend(cfg, client)).Query(r.Context(), q)
 	if err != nil {
 		writeKafkaError(w, err)
@@ -456,7 +472,7 @@ func (s *Server) streamMessages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_message_filter", err.Error())
 		return
 	}
-	_, cfg, err := s.kafka(r.PathValue("cluster"))
+	client, cfg, err := s.kafkaClient(r.PathValue("cluster"))
 	if err != nil {
 		writeError(w, 503, "cluster_unavailable", err.Error())
 		return
@@ -466,7 +482,6 @@ func (s *Server) streamMessages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, "stream_unsupported", "服务器不支持消息流")
 		return
 	}
-	client, _ := s.clusters.Kafka(cfg.ID)
 	q.Limit = 500
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -515,11 +530,10 @@ func messageQuery(r *http.Request, mode string) (messageService.Query, error) {
 	return query, nil
 }
 func (s *Server) produceMessage(w http.ResponseWriter, r *http.Request) {
-	_, cfg, ok := s.writableKafka(w, r, "message.produce", "")
+	client, cfg, ok := s.writableKafkaClient(w, r, "message.produce", "")
 	if !ok {
 		return
 	}
-	client, _ := s.clusters.Kafka(cfg.ID)
 	var request messageService.ProduceRequest
 	if !decodeJSON(w, r, &request) {
 		return

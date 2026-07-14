@@ -34,6 +34,12 @@ func (c Config) Validate() error {
 	if c.Audit.ConfigBackupRetentionDays < 1 {
 		return fmt.Errorf("audit configBackupRetentionDays must be greater than zero")
 	}
+	if c.Dashboard.SampleIntervalSeconds < 5 || c.Dashboard.SampleIntervalSeconds > 3600 {
+		return fmt.Errorf("dashboard sampleIntervalSeconds must be between 5 and 3600")
+	}
+	if c.Dashboard.HistoryPoints < 2 || c.Dashboard.HistoryPoints > 10000 {
+		return fmt.Errorf("dashboard historyPoints must be between 2 and 10000")
+	}
 	return nil
 }
 

@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +12,27 @@ import (
 	"github.com/nightzjp/kafka-manager/internal/cluster"
 	"github.com/nightzjp/kafka-manager/internal/config"
 )
+
+type countingClient struct{}
+
+func (countingClient) Ping(context.Context) error { return nil }
+func (countingClient) Close()                     {}
+
+type countingFactory struct{ creates *int }
+
+func (f countingFactory) Create(context.Context, config.ClusterConfig) (cluster.Client, error) {
+	*f.creates++
+	return countingClient{}, nil
+}
+
+type mutableFactory struct{ err error }
+
+func (f *mutableFactory) Create(context.Context, config.ClusterConfig) (cluster.Client, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return countingClient{}, nil
+}
 
 func TestServerRequiresLoginForClusterData(t *testing.T) {
 	cfg := testConfig(t)
@@ -29,7 +52,7 @@ func TestServerHealthIsPublic(t *testing.T) {
 	}
 }
 
-func TestServerListsConfiguredOfflineCluster(t *testing.T) {
+func TestServerListsConfiguredClusterAsLoadingBeforeFirstSample(t *testing.T) {
 	cfg := testConfig(t)
 	server := NewServer(cfg, nil, cluster.NewManager(cluster.KafkaFactory{}), []byte("a-secret-key-with-at-least-32-bytes"))
 	login := httptest.NewRecorder()
@@ -44,13 +67,14 @@ func TestServerListsConfiguredOfflineCluster(t *testing.T) {
 	var body struct {
 		Items []struct {
 			ID     string `json:"id"`
+			Status string `json:"status"`
 			Online bool   `json:"online"`
 		} `json:"items"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if len(body.Items) != 1 || body.Items[0].ID != "dev" || body.Items[0].Online {
+	if len(body.Items) != 1 || body.Items[0].ID != "dev" || body.Items[0].Status != "loading" || body.Items[0].Online {
 		t.Fatalf("body=%+v", body)
 	}
 	if !bytes.Contains(response.Body.Bytes(), []byte(`"brokers":0`)) || !bytes.Contains(response.Body.Bytes(), []byte(`"topics":0`)) {
@@ -74,6 +98,52 @@ func TestConfigAPIHidesKafkaPassword(t *testing.T) {
 	}
 	if bytes.Contains(response.Body.Bytes(), []byte("top-secret")) || bytes.Contains(response.Body.Bytes(), []byte(password)) {
 		t.Fatalf("credential leaked: %s", response.Body.String())
+	}
+}
+
+func TestApplyClustersIfChangedSkipsMetadataOnlyReconnect(t *testing.T) {
+	cfg := testConfig(t)
+	creates := 0
+	manager := cluster.NewManager(countingFactory{creates: &creates})
+	if err := manager.Apply(context.Background(), cfg.Clusters); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(cfg, nil, manager, []byte("a-secret-key-with-at-least-32-bytes"))
+	candidate := append([]config.ClusterConfig(nil), cfg.Clusters...)
+	candidate[0].Name = "新名称"
+	candidate[0].ReadOnly = true
+
+	changed, err := server.applyClustersIfChanged(context.Background(), candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if changed || creates != 1 {
+		t.Fatalf("changed=%v creates=%d, want false and 1", changed, creates)
+	}
+}
+
+func TestRollbackClustersClosesCandidateWhenOldConnectionCannotBeRestored(t *testing.T) {
+	factory := &mutableFactory{}
+	manager := cluster.NewManager(factory)
+	current := []config.ClusterConfig{{ID: "dev", Brokers: []string{"old:9092"}}}
+	if err := manager.Apply(context.Background(), current); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(config.Config{Clusters: current}, nil, manager, []byte("a-secret-key-with-at-least-32-bytes"))
+	candidate := []config.ClusterConfig{{ID: "dev", Brokers: []string{"new:9092"}}}
+	if err := manager.Apply(context.Background(), candidate); err != nil {
+		t.Fatal(err)
+	}
+	factory.err = errors.New("old broker unavailable")
+
+	if err := server.rollbackClusters(current); err == nil {
+		t.Fatal("expected rollback connection failure")
+	}
+	if _, ok := manager.Get("dev"); ok {
+		t.Fatal("candidate client remained usable after rollback failure")
+	}
+	if !manager.Matches(current) {
+		t.Fatal("manager did not restore the authoritative current configuration")
 	}
 }
 

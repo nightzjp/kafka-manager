@@ -256,3 +256,9 @@
   .sidebar.collapsed .sidebar-foot { padding:0 12px; justify-content:flex-start; }
   .sidebar.collapsed .sidebar-foot .health-dot { margin-right:7px; }
 }
+.connection-offline i,
+.connection-error i { background: var(--danger); }
+
+.connection-loading i { background: var(--warning); }
+
+.offline-message.pending { color: var(--warning); }
